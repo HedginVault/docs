@@ -81,6 +81,6 @@ For every expected error, the checker also confirms the body is the documented `
 
 ## Limits
 
-The checker probes at most the first three vaults the key manages, to stay under the API's per-IP limit of 60 requests per minute. Each request times out after 30 seconds.
+The checker probes at most the first three vaults the key manages, to keep its request count small. The API's default limit is 120 requests per minute per key. Each request times out after 30 seconds.
 
 It tests the contract, not the safety of a build. Signing and inspection are covered in [Execute and safety](/sdk/safety). For the endpoints themselves, see the [API reference](/api-reference/introduction).
