@@ -5392,7 +5392,8 @@
           "partial",
           "unpriced",
           "tokens",
-          "positions"
+          "positions",
+          "solPriceUsd"
         ],
         "properties": {
           "depositToken": {
@@ -5417,6 +5418,13 @@
               "integer",
               "null"
             ]
+          },
+          "solPriceUsd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "USD per whole SOL today, for showing values in SOL. `null` when no price is available."
           },
           "partial": {
             "type": "boolean",
