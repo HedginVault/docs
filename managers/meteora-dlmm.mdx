@@ -1,0 +1,101 @@
+---
+title: "Provide liquidity with Meteora DLMM"
+description: "Open, manage, and exit Meteora DLMM liquidity positions and limit orders from a Hedgin vault."
+---
+
+Meteora DLMM (Dynamic Liquidity Market Maker) is a type of trading pool on Solana. You add two tokens to a pool, traders swap against them, and you earn a share of the trading fees. A Hedgin vault can hold DLMM positions and limit orders. This page shows how to run them from the manager console.
+
+## How DLMM liquidity works
+
+A DLMM pool splits its price range into **bins**. Each bin covers one small price step and holds liquidity at that price. The **active bin** holds the current pool price. Only liquidity in the active bin earns fees from trades at that moment.
+
+A **position** is your liquidity spread across a range of bins. Bins above the current price hold the pool's first token (token X). Bins below it hold the second token (token Y). As the price moves through your range, trades convert one token into the other.
+
+Each pool has a **bin step**: the price gap between two neighboring bins. A small bin step suits stable pairs. A large one suits volatile pairs.
+
+### Pair rules for vaults
+
+A vault can open a position in any pool. The program requires one thing first: each pool token other than the deposit token needs a Jupiter strategy, so the keeper counts it in the vault's value. The console creates any missing Jupiter strategy when you open a position or place a limit order.
+
+The keeper values each position from its token amounts and its unclaimed fees. It does not count unclaimed Meteora farming rewards.
+
+## Open a position
+
+<Steps>
+  <Step title="Choose a pool">
+    Open the **Liquidity** tab and search for a pool. Compare the pair, bin step, current price, liquidity, and fees before you choose.
+  </Step>
+  <Step title="Set the price range">
+    Drag the range on the chart, or type the lower and upper prices. The panel shows **Total bins**, up to 1,400. The default range is 70 bins around the current price.
+  </Step>
+  <Step title="Pick a shape">
+    Under **Strategy**, pick how the liquidity spreads across the range:
+    - **Spot** puts the same amount in every bin.
+    - **Curve** puts more near the current price and less at the edges.
+    - **Bid-Ask** puts more at the edges and less near the current price.
+  </Step>
+  <Step title="Enter the amounts">
+    Enter how much of each token to add. **Auto-fill on drag** keeps the two amounts in line with the range.
+  </Step>
+  <Step title="Open the position">
+    Select **Open position** and approve the transactions. The panel shows the **Position rent deposit**. Meteora refunds it when the position closes.
+  </Step>
+</Steps>
+
+A range wider than 70 bins needs several transactions. The console asks your wallet to approve them in one request and sends them in order. If one step fails, the steps that already confirmed stay in place. Reopen the position panel to see the current state. [How transactions work](/concepts/transactions) explains why.
+
+The program blocks new positions and added liquidity while the vault or the protocol is reduce-only or paused.
+
+## Manage a position
+
+Select the position in the **Liquidity** tab or the **Portfolio** tab. The position panel has three modes:
+
+- **Add**: add more of either token to the existing range.
+- **Remove**: pick a percentage, then select the remove button, for example **Remove 50%**. That share of the liquidity goes back to the vault.
+- **Claim fees**: move the fees the position has earned into the vault.
+
+### Flip one side to Bid-Ask
+
+After the price moves, part of your range can hold only one token. **Flip** removes the selected bins that hold only the non-deposit token and adds the same amount back in a Bid-Ask shape, in one transaction.
+
+1. Select the bins to flip.
+2. Select **Flip** followed by the token name, for example **Flip SOL to Bid-Ask**.
+3. Approve the transaction.
+
+Flip does not claim fees. If the pool price moves before the transaction lands, it fails. Refresh and try again.
+
+## Exit a position
+
+**Zap out** exits a position in one action. It removes all liquidity, claims fees, sells the non-deposit token to the deposit token through Jupiter, and closes the position.
+
+1. Open the position panel.
+2. Select **Zap out** followed by the deposit token name, for example **Zap out to USDC**.
+3. Approve the transactions. Positions up to 1,400 bins need one wallet approval.
+
+Zap out works only when the pool includes the deposit token. In each transaction, the remove, the claim, and the swap happen together. If the swap fails, that whole transaction fails, so the vault never holds a half-finished step. A restarted zap out builds transactions only for the bins that still hold tokens or fees.
+
+To exit by hand instead, remove all liquidity, claim the fees, and select **Close position**.
+
+Removing liquidity and claiming fees work while the vault is reduce-only. They need the protocol status to be Normal.
+
+## Place a limit order
+
+A DLMM **limit order** rests one token in up to 50 bins, waiting for the price to reach it. When a swap crosses an order's bin, the order fills at that bin's price and earns a maker fee. The proceeds and fees stay inside the order until you cancel it.
+
+<Steps>
+  <Step title="Choose the side">
+    Open the limit order card for a pool. Select **Sell X** to sell token X above the current price, or **Buy X** to buy token X below it.
+  </Step>
+  <Step title="Set the price and amount">
+    Enter the **Limit price** in token Y per token X and the amount. A sell price must be above the pool price. A buy price must be below it.
+  </Step>
+  <Step title="Place the order">
+    Select **Place order** and approve the transaction. The order appears as a strategy, with each bin shown as open, partly filled, or filled.
+  </Step>
+</Steps>
+
+To cancel, select **Cancel order** in the **Portfolio** tab. The vault receives the unfilled amount, the fill proceeds, and the maker fees. Cancelling the whole order also closes its strategy in the same transaction.
+
+## Use a bot
+
+The [manager bot API](/api-reference/introduction) covers every DLMM action in this guide: pool search, opening, adding, removing, flipping, claiming, zap out, closing, and limit orders. Wide positions return several transactions with ordering markers, and some actions return a follow-up step. A bot must follow those markers exactly. The API reference describes each action's fields.

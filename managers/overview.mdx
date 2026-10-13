@@ -1,0 +1,168 @@
+---
+title: "Manage a vault"
+description: "Run a Hedgin vault from start to finish in the manager console: get whitelisted, create the vault, set fees, invest, handle requests, claim fees, and close it."
+---
+
+This guide follows a vault through its whole life in the [Hedgin manager console](https://hedgin.xyz/manage). Each section is one task. Read [How the Hedgin protocol works](/concepts/protocol) and [Vaults, shares, and NAV](/concepts/vaults-and-nav) first if you are new to Hedgin.
+
+<Warning>
+Hedgin runs on Solana mainnet. Every transaction you approve moves real vault funds. The program checks every action, but it cannot stop a bad trade that follows its rules.
+</Warning>
+
+## Get whitelisted
+
+Only whitelisted wallets can create vaults. A Hedgin administrator adds wallets to the whitelist. There is no self-service sign-up.
+
+1. Choose the wallet that will manage your vaults.
+2. Send its public address to Hedgin and ask to be added as a manager.
+3. Open [hedgin.xyz/manage](https://hedgin.xyz/manage) and connect that wallet.
+
+If the page shows **Not a manager yet**, the wallet is not on the whitelist yet.
+
+## Create a vault
+
+<Warning>
+The wallet that creates a vault becomes its **authority**: the only key that can manage it. The program has no way to move a vault to another wallet. If you lose this key, you lose control of the vault. Store it as carefully as the funds it will manage.
+</Warning>
+
+<Steps>
+  <Step title="Open the dialog">
+    On the **Your vaults** page, select **New vault**.
+  </Step>
+  <Step title="Name the vault">
+    Enter a **Name** of up to 32 bytes. The program stores this name on chain.
+  </Step>
+  <Step title="Pick the deposit token">
+    Select **USDC**, **USDT**, or **SOL**. You cannot change this later. To trade [Phoenix perpetuals](/managers/phoenix-perps), pick USDC.
+  </Step>
+  <Step title="Set the fees">
+    Enter a **Performance fee (%)** of at most 50 and a **Management fee (%/yr)** of at most 5. The defaults are 10% and 2%.
+  </Step>
+  <Step title="Set the limits">
+    Open **Limits**. Set a **Deposit cap**, a **Minimum deposit**, and a **Min. withdrawal (shares)**. All three must be greater than zero.
+  </Step>
+  <Step title="Approve the transaction">
+    Select **Create vault** and approve the transaction. The console opens your new vault.
+  </Step>
+</Steps>
+
+The new vault starts with a NAV per share of 1 deposit token and the **Normal** status. It accepts deposit requests right away.
+
+## Write the vault profile
+
+Depositors read your profile on the public vault page. The profile is display information stored by Hedgin, not on the Solana program.
+
+1. Open the vault's **Settings** tab.
+2. In **Profile**, fill in **Display name**, **Strategy**, tags, and **Description**. The description accepts Markdown, but images and HTML do not appear.
+3. Select **Save profile**. Your wallet asks you to sign a message. Signing a message is not a transaction and costs no fees.
+
+To set your manager name and X handle for all your vaults, use **Manager profile** on the **Your vaults** page.
+
+## Change settings and fees
+
+All settings live in the **Settings** tab under **Vault settings**. Only the fields you change are sent.
+
+- **Performance fee (%)** and **Management fee (% / year)**. A lower fee applies immediately. A higher fee applies at the first valuation at least 7 days later, so depositors can leave first. The tab shows when a scheduled increase takes effect. Submitting new fees replaces a scheduled change.
+- **Deposit cap**, **Minimum deposit**, and **Minimum withdrawal (shares)**. The minimums must stay above zero.
+- **Status**: **Normal**, **Reduce only**, or **Paused**. Reduce-only stops deposits and new risk but lets depositors leave. Paused stops almost everything.
+- **Pause** switches for **Deposits** and **Withdrawals**. Each switch blocks new requests and their settlement. Depositors can still cancel.
+
+[What the status and pause switches block](/concepts/vaults-and-nav#what-the-status-and-pause-switches-block) lists every action each setting allows.
+
+Select **Save changes** and approve the transaction.
+
+## Invest the vault
+
+The console has one tab for each trading venue. Each guide explains the full flow:
+
+<CardGroup cols={3}>
+  <Card title="Jupiter swaps" icon="arrows-rotate" href="/managers/jupiter-swaps">
+    Swap the deposit token into other tokens and back.
+  </Card>
+  <Card title="Meteora DLMM" icon="chart-column" href="/managers/meteora-dlmm">
+    Provide liquidity in price bins and place limit orders.
+  </Card>
+  <Card title="Phoenix perps" icon="chart-line" href="/managers/phoenix-perps">
+    Trade leveraged long and short positions from a USDC vault.
+  </Card>
+</CardGroup>
+
+The **Portfolio** tab lists every holding with its actions, such as **Sell all & close** or **Zap out**. A floating Jupiter button opens **Quick swap** from any tab. The **History** tab shows closed strategies with their token flows and profit or loss.
+
+Every position you open is a **strategy**: a program record that ties the holding to your vault. The keeper values only holdings that a strategy tracks. [What the keeper counts](/concepts/vaults-and-nav#what-the-keeper-counts) has the full list.
+
+## Keep cash for withdrawals
+
+A withdrawal settles only if the vault's idle balance covers the payout. The **idle balance** is the deposit token sitting in the vault outside any strategy. The keeper never closes your positions to pay a withdrawal.
+
+Before each valuation, check the **Requests** tab for pending withdrawals. If the idle balance is too small, sell tokens back to the deposit token or remove liquidity.
+
+## Settle requests
+
+The keeper settles ready requests right after each valuation. You do not need to act in most cases.
+
+If a request stays ready, for example because you just freed cash for a withdrawal, settle it yourself:
+
+1. Open the **Requests** tab. Ready requests show the **Ready** state.
+2. Select **Resolve** on one request, or **Resolve all ready** for all of them.
+3. Approve the transaction.
+
+A bar at the top of other tabs also shows ready requests, with **Review** and **Resolve all** buttons. A request can settle only in the 4-hour window of its valuation. After that window ends, it waits for the next valuation.
+
+## Claim your fees
+
+Fees build up as unclaimed vault shares at each valuation.
+
+1. Open the **Portfolio** tab.
+2. Under **Your fees**, select **Claim fees →**. If you see **Nothing to claim yet**, no fees have built up.
+3. Approve the transaction.
+
+The program sends the fee shares to your wallet. They are ordinary vault shares. To turn them into deposit tokens, withdraw them like any depositor.
+
+## Close strategies
+
+Close a strategy when you no longer need it. Closing returns the account rent to your wallet. The holding must be empty first.
+
+- For a swapped token, select **Sell all & close** in the **Portfolio** tab.
+- For a DLMM position, select **Zap out** or remove all liquidity, then select **Close position**.
+- For a DLMM limit order, select **Cancel order**. Cancelling the whole order also closes its strategy.
+- For Phoenix, close all positions, withdraw all collateral, wait for queued withdrawals, then select **Close strategy**.
+
+## Close the vault
+
+Closing a vault deletes its accounts and returns their rent to your wallet. You cannot undo it.
+
+The vault must meet all of these conditions first:
+
+- Share supply is zero. Every depositor has withdrawn, and you have withdrawn your own fee shares.
+- No deposit or withdrawal request is pending.
+- No fee shares are unclaimed.
+- Every strategy is closed.
+- Total assets are zero. A valuation after the last withdrawal records this.
+- The idle balance is zero.
+
+To close the vault:
+
+1. Open the **Settings** tab and expand **Advanced: close vault**.
+2. Check that the panel shows **All preconditions are met.** Otherwise it lists what is left.
+3. Select **Close vault** and confirm.
+4. Approve the transaction.
+
+## Automate with a bot
+
+The [manager bot API](/api-reference/introduction) lets a bot build the same transactions that the console builds. The bot signs each transaction with the vault's authority key on its own machine. A Hedgin administrator issues the API key. Each key lists the vaults and the exact actions it may use.
+
+| Task | Web console | Bot API |
+| --- | --- | --- |
+| Create a vault | Yes | Yes, with a key that has no vault list |
+| Change settings, fees, status, or pause switches | Yes | Yes |
+| Edit the vault or manager profile | Yes | No |
+| Jupiter swaps, strategy setup, and sell-all | Yes | Yes |
+| Meteora DLMM positions and limit orders | Yes | Yes |
+| Phoenix setup, collateral, orders, and unwrap | Yes | Yes |
+| Claim manager fees | Yes | Yes |
+| Close strategies and the vault | Yes | Yes |
+| Settle deposit and withdrawal requests | Yes | No |
+| Deposit or withdraw | Yes, on the vault page | No |
+
+A feature in the console does not imply a bot endpoint. The [API reference](/api-reference/introduction) is the list of supported actions.

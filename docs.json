@@ -1,0 +1,187 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Hedgin",
+  "colors": {
+    "primary": "#38bdf8",
+    "light": "#7dd3fc",
+    "dark": "#0284c7"
+  },
+  "logo": {
+    "light": "/logo.png",
+    "dark": "/logo.png"
+  },
+  "favicon": "/icon.png",
+  "appearance": {
+    "default": "dark",
+    "strict": true
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "label": "Open app",
+      "href": "https://hedgin.xyz/vaults"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "index",
+              "start-here"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/protocol",
+              "concepts/vaults-and-nav",
+              "concepts/transactions"
+            ]
+          },
+          {
+            "group": "Depositors",
+            "pages": [
+              "depositors/deposits-and-withdrawals"
+            ]
+          },
+          {
+            "group": "Managers",
+            "pages": [
+              "managers/overview",
+              "managers/jupiter-swaps",
+              "managers/meteora-dlmm",
+              "managers/phoenix-perps",
+              "managers/telegram-bot"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API reference",
+        "openapi": "api-reference/openapi.json",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/introduction",
+              "api-reference/getting-started",
+              "api-reference/authentication",
+              "api-reference/units-and-views",
+              "api-reference/send-and-status",
+              "api-reference/errors-and-limits",
+              "api-reference/examples"
+            ]
+          },
+          {
+            "group": "Vault reads",
+            "pages": [
+              "GET /vaults",
+              "GET /vaults/{vault}",
+              "GET /vaults/{vault}/holdings",
+              "GET /vaults/{vault}/strategies",
+              "GET /vaults/{vault}/nav",
+              "GET /vaults/{vault}/requests",
+              "GET /vaults/{vault}/strategy-history",
+              "GET /vaults/{vault}/phoenix"
+            ]
+          },
+          {
+            "group": "Market reads",
+            "pages": [
+              "GET /jupiter/quote",
+              "GET /dlmm/pools",
+              "GET /dlmm/pools/{lbPair}",
+              "GET /tokens/{mint}"
+            ]
+          },
+          {
+            "group": "Jupiter transactions",
+            "pages": [
+              "POST /transactions/jupiter/initialize",
+              "POST /transactions/jupiter/swap",
+              "POST /transactions/jupiter/sweep"
+            ]
+          },
+          {
+            "group": "Meteora DLMM transactions",
+            "pages": [
+              "POST /transactions/dlmm/initialize",
+              "POST /transactions/dlmm/open",
+              "POST /transactions/dlmm/add",
+              "POST /transactions/dlmm/add-range",
+              "POST /transactions/dlmm/extend",
+              "POST /transactions/dlmm/remove",
+              "POST /transactions/dlmm/flip",
+              "POST /transactions/dlmm/claim-fee",
+              "POST /transactions/dlmm/zap-out",
+              "POST /transactions/dlmm/zap-out/swap",
+              "POST /transactions/dlmm/close",
+              "POST /transactions/dlmm/limit-order/place",
+              "POST /transactions/dlmm/limit-order/cancel"
+            ]
+          },
+          {
+            "group": "Phoenix transactions",
+            "pages": [
+              "POST /transactions/phoenix/initialize",
+              "POST /transactions/phoenix/onboard",
+              "POST /transactions/phoenix/deposit",
+              "POST /transactions/phoenix/withdraw",
+              "POST /transactions/phoenix/order",
+              "POST /transactions/phoenix/cancel",
+              "POST /transactions/phoenix/sweep"
+            ]
+          },
+          {
+            "group": "Vault and strategy transactions",
+            "pages": [
+              "POST /transactions/vault/initialize",
+              "POST /transactions/vault/update",
+              "POST /transactions/vault/claim-fee",
+              "POST /transactions/vault/close",
+              "POST /transactions/strategy/close"
+            ]
+          },
+          {
+            "group": "Send and status",
+            "pages": [
+              "POST /transactions/send",
+              "POST /transactions/phoenix/onboard/submit",
+              "GET /transactions/status"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "SDK",
+        "groups": [
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "sdk/overview",
+              "sdk/reads",
+              "sdk/actions",
+              "sdk/safety",
+              "sdk/api-checker"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "api": {
+    "playground": {
+      "display": "simple"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/HedginVault"
+    }
+  }
+}

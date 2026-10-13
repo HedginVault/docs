@@ -1,0 +1,122 @@
+---
+title: "Deposit into and withdraw from a vault"
+description: "Request a deposit or a withdrawal on the Hedgin website, follow it until it settles, and cancel it if you change your mind."
+---
+
+Deposits and withdrawals on Hedgin are requests. You create a request, it waits for the vault's next valuation, and then it settles at that price. This page shows each step on the [Hedgin website](https://hedgin.xyz/vaults). To learn why requests wait, read [Vaults, shares, and NAV](/concepts/vaults-and-nav).
+
+You need:
+
+- A Solana wallet that works in your browser, such as Phantom or Solflare.
+- The vault's deposit token in that wallet, for example USDC for a USDC vault.
+- A small amount of SOL to pay network fees and account rent. **Rent** is a refundable SOL deposit that Solana charges to store an account. The rent for a request comes back to you when the request closes.
+
+<Warning>
+Hedgin runs on Solana mainnet. Every transaction you approve moves real tokens. Read what your wallet shows before you approve it.
+</Warning>
+
+## Choose a vault
+
+1. Open [hedgin.xyz/vaults](https://hedgin.xyz/vaults).
+2. Select a vault to open its page.
+3. Check these facts before you deposit:
+   - **Status**. A vault marked **Active** accepts deposits. **Reduce only** and **Paused** vaults do not.
+   - **Deposit token**. The vault accepts only this token.
+   - **Share price**: the vault's NAV per share. This is the value of one share at the last valuation.
+   - **Fees**: the manager's performance fee and management fee.
+   - **Deposit cap** and **Minimum deposit**, in the **Details** section.
+   - **Last NAV update**: when the vault was last valued, and when requests become claimable.
+
+The vault value shown at the top is a live estimate. Requests settle at the posted NAV, not at the live estimate.
+
+## Deposit
+
+<Steps>
+  <Step title="Connect your wallet">
+    On the vault page, connect your wallet. The **Your position** panel shows your shares and their value.
+  </Step>
+  <Step title="Enter an amount">
+    Select the **Deposit** tab. Enter an amount in the deposit token, or select **Max**. The panel shows **Estimated shares** at the current share price.
+  </Step>
+  <Step title="Request the deposit">
+    Select **Request deposit** and approve the transaction in your wallet. The program moves your tokens into the vault's escrow. **Escrow** is a holding account that the program controls. Your tokens wait there and are not invested yet.
+
+    In a SOL vault, the website wraps your SOL into wrapped SOL for you. It leaves 0.01 SOL in your wallet for fees.
+  </Step>
+  <Step title="Wait for the next NAV">
+    The request card shows **Pending NAV update**. The vault is valued once in each 4-hour window that starts at 00:00, 04:00, 08:00, 12:00, 16:00, or 20:00 UTC. Your request becomes ready after the next valuation, so the wait is up to about 4 hours.
+  </Step>
+  <Step title="Receive your shares">
+    The Hedgin keeper settles ready requests right after each valuation, so your shares usually arrive without any action. If the card shows **Ready to claim**, select **Claim shares** to settle it yourself.
+  </Step>
+</Steps>
+
+You receive your deposit amount divided by the new NAV per share. For example, you deposit 1,000 USDC and the new NAV per share is 1.25 USDC. You receive 800 shares.
+
+### Why a deposit request can fail
+
+The website checks these rules before you sign, and the program checks them again:
+
+- The amount is below the vault's **Minimum deposit**.
+- The amount exceeds the space left under the **Deposit cap**. The cap includes deposits that other people have requested but that have not settled yet.
+- The vault manager has paused deposits, or the vault is reduce-only or paused.
+- You have an older deposit request in this vault that has not settled. Claim it or cancel it first. A second deposit in the same 4-hour window adds to your open request instead.
+
+## Withdraw
+
+<Steps>
+  <Step title="Enter a share amount">
+    On the vault page, select the **Withdraw** tab. Enter the number of shares to sell, or select **Max**. The panel shows the **Estimated payout** at the current share price.
+  </Step>
+  <Step title="Request the withdrawal">
+    Select **Request withdrawal** and approve the transaction. The program moves your shares into escrow.
+  </Step>
+  <Step title="Wait for the next NAV">
+    The request waits for the next valuation, like a deposit.
+  </Step>
+  <Step title="Receive your tokens">
+    The keeper settles the request after the valuation. The program burns your shares and pays the deposit token to your wallet. In a SOL vault, you receive native SOL. If the card shows **Ready to claim**, select the claim button, such as **Claim USDC**, to settle it yourself.
+  </Step>
+</Steps>
+
+You receive your shares multiplied by the new NAV per share. For example, you withdraw 800 shares and the new NAV per share is 1.30 USDC. You receive 1,040 USDC.
+
+Withdrawals stay open when a vault is reduce-only. Only a pause stops them.
+
+If your share balance is below the vault's **Minimum withdrawal**, you can still withdraw your whole balance.
+
+### Why a withdrawal can stay unsettled
+
+A withdrawal settles only if the vault has enough **idle** deposit tokens: tokens that sit in the vault and are not invested in a strategy. If the manager has invested most of the vault, your request waits until the manager frees enough cash. The keeper does not close the manager's positions to pay you.
+
+A withdrawal also waits while the vault or the protocol is paused, or while the manager has paused withdrawals.
+
+## Follow your requests
+
+The vault page shows each open request with one of these labels:
+
+| Label | Meaning | What you can do |
+| --- | --- | --- |
+| **Pending NAV update** | No valuation has happened since your request. | Wait, or cancel. |
+| **Ready to claim** | A valuation landed in the current 4-hour window. | Wait for the keeper, or claim it yourself. |
+| **Pending NAV update**, after a missed window | A valuation landed, but its 4-hour window ended before the request settled. The [Portfolio](https://hedgin.xyz/portfolio) page labels this state **Frozen**. | Wait for the next valuation. You cannot cancel or claim it now. |
+
+The [Portfolio](https://hedgin.xyz/portfolio) page lists your positions and open requests across every vault. To claim or cancel, open the vault page.
+
+A request that the website shows as sent is not finished until the chain confirms it. [How transactions work](/concepts/transactions) explains the difference.
+
+## Cancel a request
+
+You can cancel a request until the next valuation lands. After that, the request is locked to that price.
+
+1. Open the vault page.
+2. On the request card, select **Cancel**.
+3. Approve the transaction in your wallet.
+
+The program returns your escrowed tokens or shares and the request's rent. Cancellation works even when the vault is paused.
+
+If a vault's NAV per share is zero, you can cancel a deposit request at any time, because it can never settle.
+
+## Use a direct integration
+
+The website is the supported way to deposit and withdraw. The [manager bot API](/api-reference/introduction) does not offer deposit, withdrawal, or settlement actions. A team that builds its own Solana client can call the program directly with the [published IDL](https://hedgin.xyz/idl/hedge_vault.json). The program applies the same rules to every caller.

@@ -1,0 +1,75 @@
+---
+title: "Authentication"
+description: "API key format, scopes, vault access checks, and what to do when a key or manager keypair leaks."
+---
+
+Every request needs an API key in the `Authorization` header:
+
+```http
+Authorization: Bearer hv1_<id>_<secret>
+```
+
+A Hedgin administrator creates the key and shows it to you once. Store it in your bot's secret store. Keep it out of Git, logs, URLs, and browser code. Use the key exactly as issued. A missing, malformed, unknown, revoked, or expired key returns 401 with code `Unauthorized`.
+
+## What a key allows
+
+Each key carries four settings that the administrator chooses:
+
+| Setting | Effect |
+| --- | --- |
+| Manager | The Solana public key the bot signs as. The API uses it as the fee payer of every build. |
+| Vault allowlist | Optional. When set, the key can reach only those vaults. When absent, the key reaches every vault whose current authority is the manager. |
+| Actions | The scopes below. |
+| Expiry | Optional. After it, the key returns 401. |
+
+The scopes are:
+
+- `read` allows every `GET` read endpoint.
+- `send` allows `POST /transactions/send`, `POST /transactions/phoenix/onboard/submit`, and `GET /transactions/status`.
+- An exact builder action name, such as `jupiter/swap` or `dlmm/open`, allows `POST /transactions/{action}` for that action.
+
+A scope check that fails returns 403 with code `Forbidden`.
+
+## Request checks
+
+On every request that names a vault, the API reads the vault from the chain and checks two things:
+
+1. If the key has a vault allowlist, the vault is on it.
+2. The key's manager is the vault's current on-chain authority.
+
+If either check fails, the request returns 403. The check reads the chain on every request, so it reflects authority changes at once.
+
+`vault/initialize` has no vault yet, so it skips these checks. It needs a key without a vault allowlist, because a new vault cannot be on a list. A key with an allowlist gets 403.
+
+Sending a transaction needs `send` and also the builder action that produced its ticket. If the administrator removes `dlmm/open` from a key, tickets that key already built for `dlmm/open` stop working.
+
+## Scopes for follow-up steps
+
+Some builds return a `next` step that names another builder action. The key needs that action's scope too. Without it, the flow stops with a 403 after the last confirmed step.
+
+| Action you call | Actions its `next` steps can name |
+| --- | --- |
+| `jupiter/swap` | `jupiter/swap`, `jupiter/sweep` |
+| `dlmm/zap-out` | `jupiter/sweep` |
+| `dlmm/extend` | `dlmm/extend`, `dlmm/add-range` |
+| `dlmm/zap-out/swap` | `dlmm/zap-out/swap` |
+
+Phoenix onboarding needs `phoenix/onboard` and `send`. See [Send and status](/api-reference/send-and-status#phoenix-onboarding).
+
+## Change, rotate, and revoke keys
+
+Changes an administrator makes to a key take effect within about 5 seconds. If Hedgin cannot look up a key, the API returns 503 instead of letting the request through.
+
+To rotate a key:
+
+1. Ask a Hedgin administrator for a new key with the same settings.
+2. Move the bot to the new key.
+3. Ask the administrator to revoke the old key.
+
+## If a key leaks
+
+<Warning>
+Revoking an API key does not protect a leaked manager signing key. The program has no instruction that changes a vault's authority, so whoever holds the manager key controls the vault permanently. A Hedgin guardian can pause the vault, but the authority can lift that pause with `vault/update`. Keep the manager key only on the machine that runs the bot. If it leaks, contact Hedgin at once.
+</Warning>
+
+A leaked API key alone cannot move funds, because every transaction also needs the manager's signature. It still exposes your vault data and lets the holder build transactions and spend your rate limit. Ask an administrator to revoke it.

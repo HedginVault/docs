@@ -1,0 +1,59 @@
+---
+title: "Hedgin documentation"
+description: "Hedgin runs Solana investment vaults with program-enforced custody. Learn how to deposit, manage a vault, or build a bot."
+---
+
+Hedgin runs investment vaults on Solana. Depositors put one token, such as USDC, into a vault and receive shares. A whitelisted manager invests the vault through Jupiter swaps, Meteora DLMM liquidity, and Phoenix perpetuals. Every 4 hours, Hedgin values each vault, and waiting deposits and withdrawals settle at that price.
+
+A Solana program holds the vault's tokens. The manager can trade them only through those three venues and cannot send them anywhere else. Depositors get tokens back only to their own wallet.
+
+<Note>
+Hedgin runs on Solana mainnet. Every transaction moves real funds. There is no public test deployment.
+</Note>
+
+## Start with your role
+
+<CardGroup cols={2}>
+  <Card title="Depositors" icon="wallet" href="/depositors/deposits-and-withdrawals">
+    Deposit into a vault, follow your request, and withdraw.
+  </Card>
+  <Card title="Vault managers" icon="chart-line" href="/managers/overview">
+    Create a vault, set fees, invest it, and claim your fees.
+  </Card>
+  <Card title="Bot builders" icon="robot" href="/api-reference/introduction">
+    Automate manager actions with the manager bot API.
+  </Card>
+  <Card title="TypeScript SDK" icon="code" href="/sdk/overview">
+    Call the API with typed reads and one-call transaction execution.
+  </Card>
+</CardGroup>
+
+## Understand how it works
+
+<CardGroup cols={3}>
+  <Card title="The protocol" icon="shield-halved" href="/concepts/protocol">
+    Who holds the money, who can move it, and which rules apply.
+  </Card>
+  <Card title="Vaults and NAV" icon="scale-balanced" href="/concepts/vaults-and-nav">
+    How shares are priced, when requests settle, and how fees work.
+  </Card>
+  <Card title="Transactions" icon="arrow-right-arrow-left" href="/concepts/transactions">
+    Why a sent transaction is not a finished one.
+  </Card>
+</CardGroup>
+
+## Manage a vault's strategies
+
+<CardGroup cols={3}>
+  <Card title="Jupiter swaps" icon="arrows-rotate" href="/managers/jupiter-swaps">
+    Swap vault tokens with on-chain slippage checks.
+  </Card>
+  <Card title="Meteora DLMM" icon="chart-column" href="/managers/meteora-dlmm">
+    Provide liquidity in price bins and place limit orders.
+  </Card>
+  <Card title="Phoenix perps" icon="bolt" href="/managers/phoenix-perps">
+    Trade perpetuals from a USDC vault.
+  </Card>
+</CardGroup>
+
+Not sure where to begin? [Start here](/start-here) matches each goal to the right tool.

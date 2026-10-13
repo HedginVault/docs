@@ -1,0 +1,87 @@
+---
+title: "Units and views"
+description: "How the manager bot API encodes amounts, prices, bin ids, and public keys, and what the read responses contain."
+---
+
+## Amounts are base-unit strings
+
+Token amounts in requests and responses are non-negative integer strings in **base units**: the smallest unit of the token. They are never JSON numbers, because JavaScript numbers lose precision above 2^53.
+
+| Token | Decimals | Human amount | API value |
+| --- | --- | --- | --- |
+| USDC | 6 | 1 USDC | `"1000000"` |
+| SOL (wrapped) | 9 | 0.5 SOL | `"500000000"` |
+
+An amount must match `^\d+$` and fit in an unsigned 64-bit integer (at most `18446744073709551615`). Read a token's `decimals` from `GET /tokens/{mint}` or from the `TokenInfo` objects inside read responses. In TypeScript, keep amounts as `bigint` and convert with `BigInt(value)` and `value.toString()`.
+
+These fields use base-unit strings: `amount`, `amountX`, `amountY`, `depositCap`, `minDeposit`, `minWithdrawalShares`, `balanceBefore`, each `bins[].amount` in `dlmm/limit-order/place`, and every `BaseUnitAmount` field in responses.
+
+## Exceptions to base units
+
+| Field | Unit |
+| --- | --- |
+| `phoenix/order` `size` | Whole asset units as a decimal string, such as `"0.5"`. The builder rounds down to base lots. |
+| `phoenix/order` limit `price` | USD per whole asset unit as a decimal string, such as `"150.25"`. The builder rounds down to ticks. |
+| `phoenix/cancel` `priceInTicks`, `orderSequenceNumber` | Integer strings of up to 20 digits. Copy them from `GET /vaults/{vault}/phoenix`. |
+| `slippageBps`, `bpsToRemove`, fee fields | Integers in basis points. 100 basis points equal 1%. |
+| Bin ids, `maxActiveBinSlippage` | Integers. |
+| `navPerShare`, `highWaterMark` | Integer strings scaled by 10^9: the deposit base units one share base unit is worth, times 1,000,000,000. |
+| `priceUsd`, `usd`, `tvl`, and other USD figures | JSON numbers for display only. Do not use them for amounts. |
+
+Decimal strings for Phoenix accept up to 15 integer digits and up to 12 fractional digits.
+
+## Slippage is capped by the protocol
+
+Builders that swap (`jupiter/swap`, `jupiter/sweep`, `dlmm/zap-out`, `dlmm/zap-out/swap`) and `GET /jupiter/quote` accept `slippageBps` from 1 to 10000. They use the lower of your value and the protocol's `maxSlippageBps`, which `GET /vaults/{vault}` reports under `protocol.maxSlippageBps`. The quote response reports the value it used as `slippageBps`.
+
+## Bin ids: exclusive on create, inclusive elsewhere
+
+Meteora DLMM ranges use two conventions. Mixing them up shifts a range by one bin.
+
+- In `dlmm/open` and `dlmm/initialize` requests, `upperBinId` is **exclusive**. A request with `lowerBinId: 0` and `upperBinId: 10` creates bins 0 to 9.
+- Everywhere else, `upperBinId` is **inclusive**: the build response metadata of `dlmm/open` and `dlmm/initialize`, read responses, and the optional `lowerBinId` and `upperBinId` sub-range of `dlmm/add`, `dlmm/remove`, and `dlmm/flip`.
+
+A position created in one transaction spans at most 70 bins. `dlmm/open` accepts up to 1400 bins and returns a batch for anything wider than 70.
+
+## Public keys and transactions
+
+Public keys are base58 strings. The server decodes each one and rejects anything that is not 32 bytes. Transactions are standard base64 with padding and no line breaks, at most 1232 bytes once decoded.
+
+## Read responses
+
+`GET /vaults` returns `{ "vaults": VaultSummary[] }`. Every other read returns `{ "vault": "<address>", "data": ... }`.
+
+| Endpoint | `data` |
+| --- | --- |
+| `GET /vaults/{vault}` | `VaultDetail`: a `VaultSummary` plus share supply, idle balance, pending totals, unclaimed fee shares, limits, pause flags, pending fee changes, open strategy count, and protocol status. |
+| `GET /vaults/{vault}/holdings` | `HoldingsView`: live valuation of idle tokens and every open strategy. |
+| `GET /vaults/{vault}/strategies` | `StrategyView[]`, one entry per open strategy, discriminated by `type`. |
+| `GET /vaults/{vault}/nav` | `NavHistoryPoint[]`, the posted NAV history. |
+| `GET /vaults/{vault}/requests` | `RequestQueue` with `deposits` and `withdrawals`. |
+| `GET /vaults/{vault}/strategy-history` | `StrategyHistoryItem[]`, closed strategies with their token flows. |
+| `GET /vaults/{vault}/phoenix` | `PhoenixManagerView`: trader status, markets, open orders, and margin account. |
+| `GET /jupiter/quote` | `QuoteView` |
+| `GET /dlmm/pools` | `PoolSearchPage`, 20 pools per page. |
+| `GET /dlmm/pools/{lbPair}` | `PoolInfo`, including `activeBinId`. |
+| `GET /tokens/{mint}` | `TokenInfo` plus `verified`. |
+
+Each endpoint page lists every field.
+
+### Missing values are not zero
+
+- `HoldingsView.partial: true` means at least one price was unavailable. `unpriced` lists the affected symbols, and their `value` is `null`. Treat `null` as unknown, never as zero.
+- A strategy whose protocol account cannot be read appears with `type: "unreadable"` in strategies and `kind: "error"` in holdings, instead of disappearing.
+- In the Phoenix view, `openOrders`, `withdrawable`, and `account` are `null` when Phoenix data is unavailable.
+- In `GET /tokens/{mint}`, `verified` is `null` when Jupiter's token list is unavailable.
+
+### How fresh reads are
+
+Responses carry `Cache-Control: no-store`, but the server reuses recent results:
+
+| Data | Can be up to |
+| --- | --- |
+| Vault list, vault detail, holdings, strategies | 15 seconds old |
+| Requests, Phoenix view | 10 seconds old |
+| Pool info | 3 seconds old |
+
+The vault authority check always reads the chain. On-chain state is the source of truth for balances, shares, fees, and NAV. Prices and live valuations are estimates for display.

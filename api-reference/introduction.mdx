@@ -1,0 +1,65 @@
+---
+title: "Manager bot API"
+description: "What the Hedgin manager bot API V1 does, who it is for, and how its endpoints fit together."
+---
+
+The manager bot API lets an approved bot read the vaults its manager controls and get Solana transactions built for them. The bot signs each transaction on its own machine. Hedgin never holds the signing key.
+
+Base URL: `https://hedgin.xyz/api/external/v1`
+
+<Warning>
+The API runs only on Solana mainnet-beta. There is no test deployment. Every transaction you send moves real funds. Develop against the read endpoints first, with no signing key loaded. Then trade from a dedicated vault that holds a small balance.
+</Warning>
+
+## Two keys, two jobs
+
+A bot works with two separate secrets:
+
+- The **API key** (`hv1_<id>_<secret>`) lets the bot call this HTTP API. A Hedgin administrator issues it and decides what it may do. See [Authentication](/api-reference/authentication).
+- The **manager signing key** is the Solana keypair that is the vault's on-chain authority. The bot keeps it locally and signs every transaction with it.
+
+The API key cannot sign anything and cannot get around the program's checks. The Solana program checks the manager's signature on every transaction.
+
+## How a transaction flows
+
+A write is never a single call. The bot moves through four separate states, and each one can fail on its own:
+
+1. **Build.** `POST /transactions/{action}` returns an unsigned transaction and a short-lived ticket.
+2. **Sign.** The bot signs the exact transaction locally with the manager key.
+3. **Send.** `POST /transactions/send` checks the signed bytes against the ticket and relays them to Solana.
+4. **Confirm.** `GET /transactions/status` reports whether the transaction landed.
+
+A successful send is not a confirmed transaction. Only `confirmed` from the status endpoint means the action happened. [Send and status](/api-reference/send-and-status) covers the full sequence.
+
+## Endpoint groups
+
+| Group | Endpoints | Key scope |
+| --- | --- | --- |
+| Vault reads | `GET /vaults`, `GET /vaults/{vault}`, and `GET /vaults/{vault}/` followed by `holdings`, `strategies`, `nav`, `requests`, `strategy-history`, or `phoenix` | `read` |
+| Market reads | `GET /jupiter/quote`, `GET /dlmm/pools`, `GET /dlmm/pools/{lbPair}`, `GET /tokens/{mint}` | `read` |
+| Transaction builders | `POST /transactions/{action}` | The exact action name |
+| Send | `POST /transactions/send` | `send` and the action that built the ticket |
+| Phoenix onboarding submit | `POST /transactions/phoenix/onboard/submit` | `send` and `phoenix/onboard` |
+| Status | `GET /transactions/status` | `send` |
+
+## Builder actions
+
+V1 has 28 builder actions:
+
+- **Jupiter:** `jupiter/initialize`, `jupiter/swap`, `jupiter/sweep`.
+- **Meteora DLMM positions:** `dlmm/initialize`, `dlmm/open`, `dlmm/add`, `dlmm/remove`, `dlmm/flip`, `dlmm/claim-fee`, `dlmm/zap-out`, `dlmm/close`.
+- **Meteora DLMM continuations:** `dlmm/extend`, `dlmm/add-range`, `dlmm/zap-out/swap`. A bot usually reaches these through a `next` step that an earlier build returned.
+- **Meteora DLMM limit orders:** `dlmm/limit-order/place`, `dlmm/limit-order/cancel`.
+- **Phoenix perpetuals:** `phoenix/initialize`, `phoenix/onboard`, `phoenix/deposit`, `phoenix/withdraw`, `phoenix/order`, `phoenix/cancel`, `phoenix/sweep`.
+- **Vault:** `vault/initialize`, `vault/update`, `vault/claim-fee`, `vault/close`.
+- **Strategy:** `strategy/close`.
+
+Depositor actions, request resolution, and administrator actions are not part of V1.
+
+## Where to go next
+
+- [Getting started](/api-reference/getting-started) walks through a first read, build, and send.
+- [Units and views](/api-reference/units-and-views) explains amounts, bin ids, and response shapes.
+- [Errors and limits](/api-reference/errors-and-limits) lists error codes and rate limits.
+- [Examples](/api-reference/examples) has a complete TypeScript send loop.
+- For TypeScript bots, the [Hedgin SDK](/sdk/overview) wraps these calls and their safety rules.

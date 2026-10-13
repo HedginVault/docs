@@ -1,0 +1,86 @@
+---
+title: "API checker"
+description: "Run hedge-check-api to probe a live Hedgin manager API for auth, routing, validation, error hygiene, and drift from the SDK's schemas."
+---
+
+`hedge-check-api` is a contract checker that ships with the SDK. It sends real requests to a live API with your key and compares the answers with the schemas the SDK parses. A failure means the API and the SDK disagree: either the API changed or the SDK is out of date.
+
+The checker never signs or sends a transaction. With `--build` it asks the API to build one unsigned swap per vault and discards it.
+
+## Run it
+
+Set `HEDGE_API_KEY` to a manager key and run the binary. The installed SDK exposes it as `hedge-check-api`:
+
+```sh
+export HEDGE_API_KEY="hv1_<id>_<secret>"
+yarn hedge-check-api
+yarn hedge-check-api --build
+```
+
+The checker refuses to start unless `HEDGE_API_KEY` matches `hv1_` followed by letters, digits, underscores, or hyphens.
+
+| Setting | Meaning |
+| --- | --- |
+| `HEDGE_API_KEY` | Required. The manager key to probe with. |
+| `HEDGE_API_BASE_URL` | Optional. The site origin or the full API base URL. Defaults to `https://hedgin.xyz`. |
+| `--build` | Optional flag. Adds one unsigned `jupiter/swap` build per vault. Needs the `jupiter/swap` scope. |
+
+In the SDK repository, `yarn check-api` runs the checker from source and also reads a local `.env` file. For the installed binary, set the variables in your shell.
+
+<Warning>
+  The default base URL is production, which runs on Solana mainnet. The checker only reads and builds, but it uses your real key and counts against the API's rate limit. Point `HEDGE_API_BASE_URL` at a non-production deployment when you have one.
+</Warning>
+
+## Read the report
+
+The checker prints one line per check, then a summary:
+
+```text
+PASS  <check name>  <ms> ms  <detail>
+FAIL  <check name>  <ms> ms  <detail>
+SKIP  <check name>  <ms> ms  <detail>
+
+<n> passed, <n> failed, <n> skipped
+```
+
+The process exits with code 1 when any check fails, or when the key is missing or malformed. Skipped checks do not change the exit code.
+
+A check is skipped, not failed, when it cannot run with this key or vault:
+
+- A history read gets `HistoryUnavailable` because the deployment has no history database.
+- The Phoenix read gets `PhoenixUnavailable` or `RpcUnavailable` because Phoenix's API is down.
+- The key lacks the `jupiter/swap` scope, or the vault lacks 0.01 of the deposit token for the build simulation.
+- The checker itself hit the rate limit (HTTP 429). Rerun after a minute.
+
+## What it checks
+
+The checker runs the first group once, then the second group for each vault.
+
+**Without a vault**
+
+- A request with no key, a wrong secret, or a malformed `Authorization` header returns 401.
+- An unknown route returns 404.
+- `GET /vaults` matches the contract.
+- Holdings for a random vault address return 403 or 404, and for an invalid address return 400.
+- A forged status receipt returns 400 or 403.
+
+**For each vault**
+
+- Holdings, strategies, vault detail, NAV history, request queue, strategy history, and the Phoenix view match their schemas.
+- A NAV history request with `limit=0` returns 400.
+- A one-token Jupiter quote and the deposit token's detail match their schemas, and an unknown mint returns 404.
+- Bad quote requests return 400: zero slippage, a decimal amount, the same mint on both sides, and a quote that does not involve the deposit mint.
+- Pool search matches its schema, the first pool's detail has an active bin, and an empty search query returns 400.
+
+**With `--build`**
+
+- A swap body that includes `payer` returns 400, because the API sets the payer from the key.
+- An unsigned swap build returns a transaction and ticket, and each step's `blockhash` equals the transaction's recent blockhash.
+
+For every expected error, the checker also confirms the body is the documented `{ error: { code, message } }` shape and does not leak internals: no `logs`, stack traces, `Program log:` lines, file paths, or `node_modules`.
+
+## Limits
+
+The checker probes at most the first three vaults the key manages, to stay under the API's per-IP limit of 60 requests per minute. Each request times out after 30 seconds.
+
+It tests the contract, not the safety of a build. Signing and inspection are covered in [Execute and safety](/sdk/safety). For the endpoints themselves, see the [API reference](/api-reference/introduction).

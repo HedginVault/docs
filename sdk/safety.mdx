@@ -1,0 +1,156 @@
+---
+title: "Execute and safety"
+description: "How execute builds, inspects, signs, sends, and confirms transactions, what the signing policy refuses, and why an unknown outcome is never retried by rebuilding."
+---
+
+A manager key can sign real transactions on Solana mainnet. The SDK is built so that a wrong, hostile, or compromised API response cannot spend the manager wallet's funds. This page explains how `execute` works and what it refuses.
+
+## What `execute` does
+
+For one `ActionRequest`, `execute` runs this loop:
+
+1. **Build.** It calls the builder endpoint. The API returns one or more steps. Each step has an unsigned base64 v0 transaction, a simulation result, a `ticket`, and a `blockhash`.
+2. **Inspect.** It checks every transaction in the build against the [signing policy](#signing-policy). If any transaction fails, nothing in that build is signed or sent, and `execute` returns `refused`.
+3. **Sign and send.** It signs each transaction with your `TransactionSigner` and posts it with its `ticket`. The `ticket` is a short-lived (90 second) proof that the API built that exact message for your key.
+4. **Confirm.** It polls the transaction status until every sent transaction in the group is confirmed, one fails, or 120 seconds pass.
+5. **Continue.** If a step carried a `next` continuation, it builds that and repeats from step 1.
+
+`onProgress` receives an event at each stage: `{ kind: "building", action }`, `{ kind: "sent", signature, status }` where `status` is `"pending"` or `"unknown"`, and `{ kind: "confirmed", signature }`.
+
+```ts
+const outcome = await hedge.execute(request, signer, {
+  onProgress: (progress) => console.log(progress),
+});
+```
+
+### Batches and confirmation barriers
+
+A build can return several transactions. Steps marked `sendConcurrently` that sit next to each other go out together. Any other step is a barrier: `execute` sends it alone and waits for it to confirm before it sends the next step.
+
+Only a confirmed group lets the next group go out. If a group fails, later groups are never sent. Transactions from earlier groups have already landed, and they stay landed.
+
+### Continuations
+
+Some builders cannot finish in one build. A step then carries `next`, a builder path and body. `execute` builds `next` after the current batch confirms, and keeps going until no step has a `next`.
+
+The continuations are `dlmm/extend` (a position wider than 70 bins), `dlmm/add-range`, `dlmm/zap-out/swap`, and `jupiter/sweep` after a zap-out. A key needs the scope of each continuation it follows. See [Key scopes](/sdk/actions#key-scopes).
+
+`execute` stops with the code `TooManySteps` after 12 builds. A longer chain means something is looping.
+
+## Outcomes
+
+`execute` returns an `Outcome` for every case the API and the network can explain. Four things decide which one.
+
+| Situation | Outcome |
+| --- | --- |
+| Every transaction confirmed and no `next` remains. | `confirmed`. `created.vault` or `created.position` is set when the action made one. |
+| Inspection rejected a transaction in a build. | `refused`, with `reason`. |
+| The API rejected a build, the API rejected a send with an error below HTTP 500, a transaction failed on chain, or a blockhash expired. | `failed`, with `code` and `message`. An expired blockhash has the code `Expired`. |
+| A send timed out or returned HTTP 500 or above and no receipt came back, or confirmation passed 120 seconds. | `unresolved`, with the `pending` signatures. |
+
+When an API error stops a send, the SDK still settles the transactions it already sent in that group before it reports the error. They may land. So `failed` does not mean nothing happened. Read the vault state before you retry.
+
+```ts
+switch (outcome.kind) {
+  case "confirmed":
+    console.log("Landed:", outcome.signatures);
+    break;
+  case "refused":
+    console.error("Not signed:", outcome.reason);
+    break;
+  case "failed":
+    console.error(outcome.code, outcome.message, "Earlier signatures:", outcome.signatures);
+    break;
+  case "unresolved":
+    console.warn("Check these on an explorer before doing anything else:", outcome.pending);
+    break;
+}
+```
+
+### Unknown outcomes: poll, never rebuild
+
+A transaction you sent is not a confirmed transaction. When a send times out or the server errors, the transaction may still have reached the network. The SDK records its signature, reports `status: "unknown"` through `onProgress`, and keeps it open.
+
+If the send returned a receipt, the SDK polls that receipt every 2 seconds. If it returned no receipt, there is nothing to poll. When every open transaction in the group lacks a receipt, the outcome is `unresolved` at once.
+
+The SDK never rebuilds after an ambiguous send. A rebuild gets a fresh blockhash and a new signature, so it could execute the same action twice. Your code should follow the same rule:
+
+- On `unresolved`, look the signatures up on an explorer. Do not call `execute` again with the same request until you know what landed.
+- On `failed`, read vault state with the [read methods](/sdk/reads) first. An earlier transaction in the batch may have landed.
+- Call `execute` again without checking only when nothing was sent: after a `refused` outcome, or after an error thrown while building.
+
+### What `execute` throws
+
+`execute` returns outcomes for API errors and policy refusals. It throws for the rest:
+
+- A network error or timeout while building, before anything is signed. Nothing was sent, so a retry is safe.
+- An error from your `signer`. If it happens after earlier transactions were sent, those signatures are visible only through `onProgress`. Record them there.
+
+Status polling errors are swallowed and retried until the deadline.
+
+## Signing policy
+
+The API builds every transaction. The SDK does not trust that. Before it signs, every transaction in a build must:
+
+- be a v0 transaction paid by the signer's key;
+- already carry every other required signature, such as the new keypair of a DLMM position;
+- call only the Hedge Vault program, ComputeBudget, the Associated Token Account program, Meteora DLMM, or Jupiter at the top level;
+- set a priority fee at or below 100,000 microLamports per compute unit.
+
+The whole build is inspected before any part of it is sent. A batch with one bad transaction is refused whole.
+
+Token movement happens by cross-program invocation inside the Hedge Vault program, so none of the allowed top-level programs can transfer funds out of the manager wallet. The manager pays only rent (for example, associated token accounts and DLMM bin arrays) and the capped priority fee.
+
+Change the cap with `maxComputeUnitPriceMicroLamports` in the [client options](/sdk/overview#client-options). Change the allowed program with `programId` only for a non-production deployment.
+
+Use `inspectTransaction` directly to check a transaction yourself:
+
+```ts
+const policy: SigningPolicy = {
+  manager,
+  programId: HEDGE_VAULT_PROGRAM_ID,
+  maxComputeUnitPriceMicroLamports: DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS,
+};
+try {
+  inspectTransaction(base64Transaction, policy);
+} catch (error) {
+  if (error instanceof UnsafeTransactionError) console.error(error.message);
+  else throw error;
+}
+```
+
+### Phoenix onboarding policy
+
+`onboardPhoenix` uses a separate, narrower policy because Phoenix signs the transaction after the manager. The transaction must be v0, paid by the signer's key, and non-empty. Its top-level instructions may call only the Phoenix program (`EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih`). ComputeBudget is refused too, so no priority fee can be set at all. The build must be a single transaction with no `next`.
+
+This is the only path that signs while another signature is still missing. `execute` refuses a direct Phoenix call and any missing co-signature.
+
+## Custom signers
+
+`TransactionSigner` is an interface with a `publicKey` and a `signTransaction` method. A hardware wallet or a KMS-backed signer can replace `keypairSigner` without other changes. The signer must add its signature and keep the signatures the builder already added.
+
+```ts
+function myKmsSigner(manager: string, signWithKms: (tx: VersionedTransaction) => Promise<VersionedTransaction>): TransactionSigner {
+  return { publicKey: new PublicKey(manager), signTransaction: signWithKms };
+}
+```
+
+`keypairFromFile(path)` reads a Solana CLI keypair file, a JSON array of 64 bytes. Its errors never include the file contents.
+
+## Errors
+
+The SDK exports two error classes.
+
+| Class | Fields | Thrown when |
+| --- | --- | --- |
+| `ApiError` | `status`, `code`, `message` | The API answers with a non-2xx status, or a 2xx body does not match the documented contract. |
+| `UnsafeTransactionError` | `message` | `inspectTransaction` or `inspectPhoenixOnboardTransaction` rejects a transaction. |
+
+Reads throw `ApiError` to your code. Inside `execute`, an `ApiError` becomes a `failed` outcome and an `UnsafeTransactionError` becomes a `refused` outcome.
+
+The SDK adds two codes of its own to `ApiError`:
+
+- `contract_mismatch`: the response was successful, but its shape differs from the schemas the SDK parses. The API and the SDK disagree. Run the [API checker](/sdk/api-checker).
+- `unexpected_response`: the status was an error and the body was not the documented `{ error: { code, message } }` shape.
+
+Other codes come from the API. See [errors and limits](/api-reference/errors-and-limits) for the list and the rate limits.

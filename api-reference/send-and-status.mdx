@@ -1,0 +1,109 @@
+---
+title: "Send and status"
+description: "Sign builds, send them in the right order, follow batches and next steps, and confirm the outcome."
+---
+
+A build gives you unsigned transactions. This page covers everything after that: signing, sending, ordering batches, following continuations, and confirming.
+
+## The build response
+
+Every builder returns:
+
+```json
+{
+  "vault": "<vault address>",
+  "result": { "transaction": "...", "simulation": { "unitsConsumed": 182345 }, "ticket": "...", "blockhash": "..." }
+}
+```
+
+`result` is one step or an array of steps. Each step has:
+
+| Field | Meaning |
+| --- | --- |
+| `transaction` | Unsigned Solana v0 transaction, base64. The fee payer is your key's manager. |
+| `simulation` | `unitsConsumed` from the build-time simulation. `deferred: true` means the step depends on an earlier step in the batch, so RPC preflight checks it at send time instead. |
+| `ticket` | Proof that this API built this exact transaction for your key. Expires 90 seconds after the build. |
+| `blockhash` | The recent blockhash inside the transaction. |
+| `sendConcurrently` | Optional. Controls batch order. See [Send a batch in order](#send-a-batch-in-order). |
+| `next` | Optional. A follow-up build. See [Follow next steps](#follow-next-steps). |
+
+Some builders add metadata fields, such as `position` from `dlmm/open` or `vault` from `vault/initialize`. The endpoint pages list them.
+
+## Sign and send one step
+
+1. Decode `transaction` from base64 and deserialize it as a `VersionedTransaction`.
+2. Sign it with the manager keypair. Keep any signatures already present. For example, `dlmm/open` includes the new position account's signature.
+3. Send `POST /transactions/send` with the signed transaction and the step's ticket:
+
+```json
+{ "transaction": "<signed base64>", "ticket": "<ticket from the same step>" }
+```
+
+The body must contain exactly these two fields. Never send the private key.
+
+Before it relays anything, the API checks that the ticket is valid and unexpired, belongs to your key, and matches the current cluster and program. It also checks that the transaction message is unchanged, the fee payer is your manager, and the manager's signature is valid. A failed check returns 403. RPC preflight then simulates the transaction. A preflight rejection returns 422, and nothing was sent.
+
+The response is:
+
+```json
+{ "signature": "<base58>", "receipt": "<receipt>", "status": "pending" }
+```
+
+| `status` | Meaning |
+| --- | --- |
+| `pending` | The RPC accepted the transaction. It is not confirmed yet. |
+| `unknown` | The RPC call failed in a way that leaves the outcome open. The transaction may have landed. |
+
+Store `signature` and `receipt` in both cases.
+
+## Confirm with the receipt
+
+Poll `GET /transactions/status?receipt=<receipt>` every 2 seconds or slower. URL-encode the receipt.
+
+| `status` | Meaning | What to do |
+| --- | --- | --- |
+| `pending` | Not yet confirmed, and the blockhash is still valid. | Poll again. |
+| `confirmed` | Landed without error at confirmed commitment or better. | Treat the step as done. |
+| `failed` | Landed and failed. The response adds `code` and `message`. | Read current state before deciding what to do. |
+| `expired` | The blockhash expired and the transaction never landed. | Read current state, then build again. |
+
+Only `confirmed` means the action happened. A receipt works only for the key that sent it, for 24 hours.
+
+<Warning>
+**Never treat `unknown` as failed.** After `status: "unknown"`, poll the same receipt until it reports `confirmed`, `failed`, or `expired`. A new build creates a new, distinct transaction, so building again too early can perform the action twice. Sending the identical signed bytes again is safe: Solana runs a given signature at most once.
+</Warning>
+
+## Send a batch in order
+
+When `result` is an array, keep its order. `sendConcurrently` splits it into groups:
+
+- A step without `sendConcurrently: true` is a **barrier**. Send it alone and wait for `confirmed` before you send anything after it.
+- A run of consecutive steps with `sendConcurrently: true` is one **group**. Send them together, then wait until every one is `confirmed` before the next barrier or group.
+
+If any step fails or expires, stop. Earlier confirmed steps stay on chain and cannot be rolled back. Read current state, such as the position from `GET /vaults/{vault}/strategies`, and build only the remaining work. DLMM builders that process bin ranges accept `cursorBinId` so you can resume where the last confirmed range ended.
+
+Each step's ticket expires 90 seconds after the build. Sign every step right after the build, and send the batch without long pauses. If a ticket expires partway, send returns 403 `InvalidTicket`. Read current state and build again.
+
+## Follow next steps
+
+A step with `next` needs a follow-up build after it confirms:
+
+```json
+"next": { "path": "jupiter/sweep", "body": { "vault": "...", "mint": "...", "slippageBps": 100 } }
+```
+
+After the step confirms, call `POST /transactions/{next.path}` with `next.body` unchanged. The follow-up reads chain state that only exists after the earlier step, which is why it is a separate build. The key needs the scope for `next.path`. [Authentication](/api-reference/authentication#scopes-for-follow-up-steps) lists which actions can return which paths.
+
+## Phoenix onboarding
+
+A `phoenix/onboard` build invokes only the Phoenix program, and Phoenix must co-sign it. `POST /transactions/send` rejects its ticket with 403.
+
+1. Build with `POST /transactions/phoenix/onboard`. The step is not simulated (`simulation.deferred: true`).
+2. Sign it with the manager keypair. The manager signs only as the fee payer.
+3. Send `{ "transaction", "ticket" }` to `POST /transactions/phoenix/onboard/submit`. The key needs `send` and `phoenix/onboard`.
+
+The API runs the same checks as send and then passes the transaction to Phoenix, which co-signs and broadcasts it. The response has the same shape as send. `status` is `unknown` when the Phoenix request failed in flight, took longer than 15 seconds, returned a reply the API could not read, or named a different signature. Poll the receipt in that case. When Phoenix returns an error reply, the API returns 502 with no receipt.
+
+## Sending outside the relay
+
+The relay is optional. A bot can submit its own signed transaction to Solana. The ticket and scopes protect this HTTP service, not the manager key's on-chain power. If you bypass the relay, you also bypass its checks, and you cannot use `GET /transactions/status` for that transaction.

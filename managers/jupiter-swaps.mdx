@@ -1,0 +1,65 @@
+---
+title: "Swap vault tokens with Jupiter"
+description: "Swap a vault's tokens through Jupiter in the manager console, set slippage, and sell a token back to the deposit token."
+---
+
+Jupiter is a Solana swap router: it finds the best path to exchange one token for another across many markets. A Hedgin vault swaps through Jupiter with the program's own checks around every trade. This page shows how to swap from the manager console.
+
+Before you start, you need a vault you manage and a connected authority wallet. [Manage a vault](/managers/overview) covers both.
+
+## How a vault tracks swapped tokens
+
+Each token the vault buys gets a **Jupiter strategy**: a program record that tells the keeper to count that token in the vault's value. The deposit token never needs one, because the keeper always counts the idle balance.
+
+The first swap into a new token creates its strategy. That step costs a small, refundable rent and can need a second wallet approval. Later swaps into the same token reuse the strategy.
+
+A swap can go in any direction:
+
+- From the deposit token into another token.
+- From another token back into the deposit token.
+- Between two non-deposit tokens, when the vault already tracks the token it sells.
+
+You cannot swap into the vault's own share token.
+
+## Swap a token
+
+<Steps>
+  <Step title="Open the Swap tab">
+    Open the vault in the manager console and select the **Swap** tab. You can also open **Quick swap** from the Jupiter button on any tab.
+  </Step>
+  <Step title="Choose the tokens">
+    Under **You pay**, choose the token to sell. Under **You receive**, choose the token to buy. To find a token, search by name or symbol, or paste its mint address. The check mark and score next to a token are Jupiter's information. They are not a Hedgin approval.
+  </Step>
+  <Step title="Enter the amount">
+    Enter the amount to sell. The card shows the **Rate**, **Price impact**, **Minimum received**, and **Route**.
+  </Step>
+  <Step title="Set the slippage">
+    Select the slippage setting and pick 0.1%, 0.5%, 1%, or 3%, or enter a custom value. **Slippage** is how far the final price may move against you before the trade fails. The card shows the **Protocol maximum**, and you cannot go above it.
+  </Step>
+  <Step title="Review and approve">
+    Select **Review swap**, check the details, and approve the transaction. A quote expires after 30 seconds. If it expires, the card fetches a new one.
+  </Step>
+</Steps>
+
+The program checks the result after Jupiter runs. It measures how many tokens the vault actually received. If that amount is below the quote minus the protocol's maximum slippage, the whole transaction fails and nothing changes.
+
+If the button shows **Vault not operational**, the vault or the protocol is not in the Normal status. Swaps are blocked while reduce-only or paused.
+
+## Sell a token back to the deposit token
+
+To exit a token fully, sell all of it and close its strategy in one transaction:
+
+1. Open the **Portfolio** tab.
+2. On the token's row, select **Sell all & close**.
+3. Approve the transaction.
+
+This step fails in two cases:
+
+- An open Meteora DLMM position or limit order still uses the token. Close the position or the order first.
+- Jupiter has no route for the token. The token stays in the vault, and its strategy stays open so the keeper keeps counting it.
+
+A normal swap that sells a token's full balance also closes its strategy.
+
+## Use a bot
+
+A bot can quote and swap through the [manager bot API](/api-reference/introduction). The actions are `jupiter/initialize`, `jupiter/swap`, and `jupiter/sweep`. A swap into a new token can return a second step that the bot must send after the first one confirms. The SDK and API reference describe the request fields.

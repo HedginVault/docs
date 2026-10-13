@@ -1,0 +1,82 @@
+---
+title: "Errors and limits"
+description: "Error format, HTTP status codes, error codes, rate limits, and request size limits of the manager bot API."
+---
+
+## Error format
+
+Every error response has this body:
+
+```json
+{ "error": { "code": "Validation", "message": "amount: must be a non-negative integer string" } }
+```
+
+`code` is stable and safe to branch on. `message` is for people. Two rules hide details:
+
+- A response with status 500, 502, or 503 always has the message `Service temporarily unavailable`.
+- A response with status 422 always has the message `Transaction rejected during simulation or preflight`.
+
+In both cases `code` still names the cause, such as `RpcUnavailable` or `SlippageToleranceExceeded`. No response contains provider logs.
+
+## Status codes
+
+| Status | Meaning | Common codes |
+| --- | --- | --- |
+| 400 | Invalid path, query, or body. Builder messages name the field: `amount: must fit in u64`. | `Validation` |
+| 401 | Missing, malformed, unknown, revoked, or expired API key. | `Unauthorized` |
+| 403 | Missing scope, vault outside the allowlist, manager not the vault authority, or a ticket, transaction, or signature that does not match its build. | `Forbidden`, `Denied`, `InvalidTicket`, `InvalidTransaction`, `InvalidSignature` |
+| 404 | Unknown route, or the vault, mint, pool, or strategy does not exist. | `NotFound` |
+| 409 | Chain state conflicts with the request. Read current state before you build again. | `Stale`, `MintInUse`, `NothingToSweep`, `PhoenixAlreadyOnboarded`, `ZapBalanceChanged`, `ZapNothingToSwap` |
+| 413 | Request body larger than 16,384 bytes. | `BodyTooLarge` |
+| 422 | Simulation or preflight rejected the transaction, or the action does not fit in Solana transactions. | A program error name such as `SlippageToleranceExceeded`, or `SimulationFailed`, `SendFailed`, `TransactionTooLarge`, `SweepUnroutable`, `PhoenixNoMark` |
+| 429 | A rate limit is exhausted. | `RateLimited` |
+| 500 | Internal error, including a build that came back malformed. | `Internal`, `BuildFailed` |
+| 502 | Jupiter, Meteora, or Phoenix failed. | `JupiterQuoteFailed`, `JupiterSwapFailed`, `PhoenixApi`, `PhoenixUnavailable`, `DlmmUnavailable` |
+| 503 | RPC, key lookup, or service configuration unavailable. | `RpcUnavailable`, `ApiUnavailable` |
+
+The common codes are a partial list. Builders pass on decoded Hedgin program errors, so new codes can appear.
+
+## Errors that are not failures
+
+`POST /transactions/send` and `POST /transactions/phoenix/onboard/submit` do not return an error when the outcome is ambiguous. Once the signed transaction passes the API's own checks, an RPC outage or a Phoenix request that fails in flight returns HTTP 200 with `status: "unknown"`, a `signature`, and a `receipt`.
+
+<Warning>
+After `status: "unknown"`, poll the receipt with `GET /transactions/status` before you build or retry anything. The transaction may already have landed. See [Send and status](/api-reference/send-and-status#confirm-with-the-receipt).
+</Warning>
+
+## Retry rules
+
+| Response | Retry? |
+| --- | --- |
+| 429, 503 on a read | Yes, after a delay that grows with each attempt. |
+| 429, 503 on a build | Yes. A build does not change chain state. |
+| 409, 422 on a build | Not unchanged. Read current state, adjust, and build again. |
+| 403 `InvalidTicket` on send | Build again. The ticket expired or does not match. |
+| 400, 401, 403 (other codes), 404 | No. Fix the request or the key first. |
+| `status: "unknown"` from send | No. Poll the receipt. |
+
+## Rate limits
+
+Every request counts against these limits. A rejected request does not use up any of them.
+
+| Limit | Applies to | Allowance |
+| --- | --- | --- |
+| Per IP address | All requests, checked before the API key | 60 per minute |
+| Per API key | All requests with a valid key | 120 per minute |
+| Per IP address, builds and quotes | `POST /transactions/{action}` and `GET /jupiter/quote` | 30 per 10 seconds, 100 per minute, and 300 per 15 minutes, all at once |
+| Per IP address, pool search | `GET /dlmm/pools` | 30 per 10 seconds, 100 per minute, and 300 per 15 minutes, all at once |
+| Per IP address, at the edge | All requests | About 20 per second |
+
+All limits refill continuously. The per-IP limit of 60 per minute is lower than the per-key limit, so a bot on one IP address reaches it first. Each server instance counts on its own, so treat these values as ceilings, not as a guaranteed quota.
+
+Status polling counts too. Poll every 2 seconds or slower.
+
+## Request limits
+
+| Limit | Value |
+| --- | --- |
+| Request body | 16,384 bytes |
+| Full request URL on reads | 4,096 characters |
+| Signed transaction | 1,232 bytes decoded, 3,000 base64 characters |
+| Build ticket lifetime | 90 seconds |
+| Status receipt lifetime | 24 hours |

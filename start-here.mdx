@@ -1,0 +1,40 @@
+---
+title: "Start here"
+description: "Pick the right Hedgin tool for your goal: the website, the manager console, the manager bot API, the SDK, or a direct program integration."
+---
+
+Hedgin has several ways in. Each one fits a different goal and needs different access. Find your goal below, then follow its link.
+
+## Pick a tool for your goal
+
+| Goal | Tool | What you need |
+| --- | --- | --- |
+| Browse vaults, their value, and their positions | [Vaults page](https://hedgin.xyz/vaults) | Nothing. No wallet or key. |
+| Deposit or withdraw | [Vault page](https://hedgin.xyz/vaults) | A Solana wallet holding the vault's deposit token and a little SOL. |
+| Run a vault by hand | [Manager console](https://hedgin.xyz/manage) | A manager wallet that a Hedgin administrator has whitelisted. |
+| Automate a vault with a bot | [Manager bot API](/api-reference/introduction) | An API key that a Hedgin administrator issues, and the vault's authority key held by the bot. |
+| Write a bot in TypeScript | [TypeScript SDK](/sdk/overview) | The same key and signer as the bot API. |
+| Build your own Solana client | [Published IDL](https://hedgin.xyz/idl/hedge_vault.json) | Your own Solana client and signer. The program checks every role and account. |
+
+The bot API covers most manager actions. It does not cover deposits, withdrawals, or request settlement. Use the website for those.
+
+## If you deposit
+
+1. Read [Vaults, shares, and NAV](/concepts/vaults-and-nav) to learn why a deposit waits up to about 4 hours.
+2. Follow [Deposit into and withdraw from a vault](/depositors/deposits-and-withdrawals).
+
+## If you manage a vault
+
+1. Ask a Hedgin administrator to whitelist your manager wallet.
+2. Read [How the Hedgin protocol works](/concepts/protocol) to learn what the program allows and blocks.
+3. Follow [Manage a vault](/managers/overview) from vault creation to closing.
+4. Use the guides for [Jupiter](/managers/jupiter-swaps), [Meteora DLMM](/managers/meteora-dlmm), and [Phoenix](/managers/phoenix-perps) as you invest.
+
+## If you build a bot
+
+1. Ask a Hedgin administrator for an API key. The key names your manager public key, the vaults it may act on, and the exact actions it may use.
+2. Keep the API key and the vault's authority key in your bot's secret store. Never put either one in a URL, a log, a browser, or a prompt.
+3. Read [How Hedgin transactions work](/concepts/transactions). A bot that retries a send too early can run the same trade twice.
+4. Read the [API introduction](/api-reference/introduction). To skip writing the signing and polling loop yourself, use the [TypeScript SDK](/sdk/overview) or fork the [example Telegram bot](/managers/telegram-bot).
+
+AI agents can read a summary of the API and these guides at [hedgin.xyz/llms.txt](https://hedgin.xyz/llms.txt).

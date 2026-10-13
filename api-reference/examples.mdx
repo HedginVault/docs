@@ -1,0 +1,220 @@
+---
+title: "Examples"
+description: "Copyable calls for reads and builds, and a TypeScript loop that signs, sends, and confirms every step of a build."
+---
+
+These examples use placeholders. Nothing moves funds until the send step. Load the API key and the manager keypair from your bot's secret store.
+
+## Read vault state
+
+<CodeGroup>
+
+```sh List vaults
+curl --fail-with-body \
+  -H "Authorization: Bearer $HEDGIN_API_KEY" \
+  https://hedgin.xyz/api/external/v1/vaults
+```
+
+```sh Holdings
+curl --fail-with-body \
+  -H "Authorization: Bearer $HEDGIN_API_KEY" \
+  https://hedgin.xyz/api/external/v1/vaults/$VAULT/holdings
+```
+
+```sh NAV history
+curl --fail-with-body --get \
+  -H "Authorization: Bearer $HEDGIN_API_KEY" \
+  --data-urlencode "limit=50" \
+  https://hedgin.xyz/api/external/v1/vaults/$VAULT/nav
+```
+
+```sh Pool with active bin
+curl --fail-with-body --get \
+  -H "Authorization: Bearer $HEDGIN_API_KEY" \
+  --data-urlencode "vault=$VAULT" \
+  https://hedgin.xyz/api/external/v1/dlmm/pools/$LB_PAIR
+```
+
+</CodeGroup>
+
+## Build transactions
+
+Each body below goes to `POST https://hedgin.xyz/api/external/v1/transactions/{action}` with `Content-Type: application/json`. Amounts are base-unit strings.
+
+<CodeGroup>
+
+```json jupiter/swap
+{
+  "vault": "VAULT_PUBLIC_KEY",
+  "sourceMint": "SOURCE_MINT",
+  "destinationMint": "DESTINATION_MINT",
+  "amount": "1000000",
+  "slippageBps": 50
+}
+```
+
+```json dlmm/open
+{
+  "vault": "VAULT_PUBLIC_KEY",
+  "lbPair": "LB_PAIR",
+  "lowerBinId": -20,
+  "upperBinId": 21,
+  "amountX": "500000000",
+  "amountY": "75000000",
+  "shape": "spot",
+  "maxActiveBinSlippage": 5
+}
+```
+
+```json dlmm/zap-out
+{
+  "vault": "VAULT_PUBLIC_KEY",
+  "position": "POSITION_PUBLIC_KEY",
+  "slippageBps": 100
+}
+```
+
+```json phoenix/order
+{
+  "vault": "VAULT_PUBLIC_KEY",
+  "symbol": "SOL",
+  "side": "long",
+  "size": "0.5",
+  "reduceOnly": false,
+  "order": { "type": "limit", "price": "150.25", "postOnly": true }
+}
+```
+
+</CodeGroup>
+
+The `dlmm/open` body creates bins -20 to 20, because `upperBinId` is exclusive there. See [Units and views](/api-reference/units-and-views#bin-ids-exclusive-on-create-inclusive-elsewhere).
+
+## Sign, send, and confirm a whole build
+
+This TypeScript module runs one build to completion. It follows the [batch](/api-reference/send-and-status#send-a-batch-in-order) and [`next`](/api-reference/send-and-status#follow-next-steps) rules, and it never builds again after an `unknown` send. It needs Node.js 18 or later and `@solana/web3.js`.
+
+<Warning>
+`execute` sends real mainnet transactions. Call it only with a vault and amounts you are ready to trade.
+</Warning>
+
+```ts hedgin.ts
+import { Keypair, VersionedTransaction } from "@solana/web3.js";
+
+const BASE_URL = "https://hedgin.xyz/api/external/v1";
+const POLL_INTERVAL_MS = 2_000;
+
+interface NextStep { path: string; body: Record<string, unknown> }
+interface BuildStep {
+	transaction: string;
+	ticket: string;
+	sendConcurrently?: boolean;
+	next?: NextStep;
+}
+interface BuildResponse { vault: string; result: BuildStep | BuildStep[] }
+interface SendResponse { signature: string; receipt: string; status: "pending" | "unknown" }
+type StatusResponse =
+	| { status: "pending" | "confirmed" | "expired" }
+	| { status: "failed"; code: string; message: string };
+
+export class HedginError extends Error {
+	constructor(readonly httpStatus: number, readonly code: string, message: string) {
+		super(`${httpStatus} ${code}: ${message}`);
+	}
+}
+
+async function call<T>(apiKey: string, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+	const response = await fetch(`${BASE_URL}/${path}`, {
+		method,
+		headers: {
+			Authorization: `Bearer ${apiKey}`,
+			...(body === undefined ? {} : { "Content-Type": "application/json" }),
+		},
+		body: body === undefined ? undefined : JSON.stringify(body),
+	});
+	// The edge proxy can answer 413 or 429 with a non-JSON body.
+	const payload: unknown = await response.json().catch(() => null);
+	if (!response.ok) {
+		const error = (payload as { error?: { code?: string; message?: string } } | null)?.error;
+		throw new HedginError(response.status, error?.code ?? "Unknown", error?.message ?? "Request failed");
+	}
+	return payload as T;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Polls one receipt until it is final. Resolves only on `confirmed`. */
+async function waitForConfirmation(apiKey: string, sent: SendResponse): Promise<void> {
+	for (;;) {
+		const status = await call<StatusResponse>(
+			apiKey, "GET", `transactions/status?receipt=${encodeURIComponent(sent.receipt)}`,
+		);
+		if (status.status === "confirmed") return;
+		if (status.status === "failed") throw new Error(`${sent.signature} failed: ${status.code} ${status.message}`);
+		if (status.status === "expired") throw new Error(`${sent.signature} expired without landing`);
+		await sleep(POLL_INTERVAL_MS);
+	}
+}
+
+interface SignedStep extends BuildStep { signedTransaction: string }
+
+/** Splits a batch into barrier steps and runs of `sendConcurrently` steps. */
+function groups(steps: SignedStep[]): SignedStep[][] {
+	const result: SignedStep[][] = [];
+	for (const step of steps) {
+		const last = result.at(-1);
+		if (step.sendConcurrently && last?.[0]?.sendConcurrently) last.push(step);
+		else result.push([step]);
+	}
+	return result;
+}
+
+/**
+ * Builds `action`, signs every step with the manager keypair, sends each group in order,
+ * waits for confirmation, and then follows `next`. Returns every confirmed signature.
+ */
+export async function execute(
+	apiKey: string,
+	manager: Keypair,
+	action: string,
+	body: Record<string, unknown>,
+): Promise<string[]> {
+	const confirmed: string[] = [];
+	let pending: NextStep | undefined = { path: action, body };
+	while (pending) {
+		const build: BuildResponse = await call<BuildResponse>(apiKey, "POST", `transactions/${pending.path}`, pending.body);
+		const steps: BuildStep[] = Array.isArray(build.result) ? build.result : [build.result];
+		// Sign everything now: every ticket expires 90 seconds after the build.
+		const signed: SignedStep[] = steps.map((step) => {
+			const transaction = VersionedTransaction.deserialize(Buffer.from(step.transaction, "base64"));
+			transaction.sign([manager]); // keeps signatures the builder already added
+			return { ...step, signedTransaction: Buffer.from(transaction.serialize()).toString("base64") };
+		});
+		for (const group of groups(signed)) {
+			const sends = await Promise.all(group.map((step) =>
+				call<SendResponse>(apiKey, "POST", "transactions/send", { transaction: step.signedTransaction, ticket: step.ticket }),
+			));
+			// An "unknown" send is polled like a pending one, never rebuilt.
+			await Promise.all(sends.map((sent) => waitForConfirmation(apiKey, sent)));
+			confirmed.push(...sends.map((sent) => sent.signature));
+		}
+		pending = steps.at(-1)?.next;
+	}
+	return confirmed;
+}
+```
+
+Call it with a key that has the builder's scope and `send`:
+
+```ts
+const signatures = await execute(apiKey, managerKeypair, "jupiter/swap", {
+	vault: "VAULT_PUBLIC_KEY",
+	sourceMint: "SOURCE_MINT",
+	destinationMint: "DESTINATION_MINT",
+	amount: "1000000",
+	slippageBps: 50,
+});
+```
+
+If `execute` throws partway through a batch, confirmed steps stay on chain, and steps sent alongside the failing one can still land. A send that threw after the request left your machine, such as a network timeout, may also have reached the API. Wait about a minute for the blockhash to expire, then read current state before you call `execute` again.
+
+`execute` does not handle Phoenix onboarding. Send a `phoenix/onboard` step to `transactions/phoenix/onboard/submit` instead of `transactions/send`.
