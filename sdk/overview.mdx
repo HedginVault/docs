@@ -13,12 +13,15 @@ The API still builds every transaction. The SDK calls the API, inspects what com
 
 ## Install
 
-The package is not on npm. `sdk/package.json` is marked `private`, so for now you consume a packed tarball built from the `sdk/` repository:
+The source is public at [github.com/HedginVault/sdk](https://github.com/HedginVault/sdk). The package is not published to npm yet, so install it straight from GitHub. Your package manager builds it during install:
 
 ```sh
-cd sdk && yarn build && yarn pack --filename ../my-bot/vendor/hedginvault-sdk.tgz
-cd ../my-bot && yarn add file:./vendor/hedginvault-sdk.tgz @solana/web3.js
+yarn add github:HedginVault/sdk @solana/web3.js
+# or
+npm install github:HedginVault/sdk @solana/web3.js
 ```
+
+To pin a version, add a commit hash, for example `github:HedginVault/sdk#<commit>`. Without one, every fresh install takes the latest `main`.
 
 `@solana/web3.js` (`^1.98.4`) is a peer dependency. Install it yourself so the SDK and your code share one copy of `Keypair`, `PublicKey`, and `VersionedTransaction`.
 

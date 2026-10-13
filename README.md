@@ -21,7 +21,7 @@ node scripts/check-openapi.mjs ../app
 
 ## Sources
 
-The API reference describes the manager bot API in `app/`. The SDK pages describe `sdk/`. When the docs and the code disagree, the code is right. Fix the page.
+The API reference describes the manager bot API in `app/`. The SDK pages describe `sdk/` ([github.com/HedginVault/sdk](https://github.com/HedginVault/sdk)). When the docs and the code disagree, the code is right. Fix the page.
 
 ## llms.txt
 
