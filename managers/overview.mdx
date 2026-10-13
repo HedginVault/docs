@@ -13,11 +13,19 @@ Hedgin runs on Solana mainnet. Every transaction you approve moves real vault fu
 
 Only whitelisted wallets can create vaults. A Hedgin administrator adds wallets to the whitelist. There is no self-service sign-up.
 
-1. Choose the wallet that will manage your vaults.
-2. Send its public address to Hedgin and ask to be added as a manager.
-3. Open [hedgin.xyz/manage](https://hedgin.xyz/manage) and connect that wallet.
+1. Create a new wallet to manage your vaults. Do not use your daily wallet. See [Prepare the manager wallet](#prepare-the-manager-wallet).
+2. Fund the new wallet with SOL for rent and network fees.
+3. Send its public address to Hedgin and ask to be added as a manager.
+4. Open [hedgin.xyz/manage](https://hedgin.xyz/manage) and connect that wallet.
 
 If the page shows **Not a manager yet**, the wallet is not on the whitelist yet.
+
+### Prepare the manager wallet
+
+Before you send an address to Hedgin, check these two things:
+
+1. **Use a new wallet, not your daily wallet.** The whitelisted wallet becomes the authority of every vault it creates, and that cannot move to another wallet later. A dedicated wallet keeps vault control apart from your personal funds, approvals, and dapp connections. If your daily wallet leaks, your vaults stay safe.
+2. **Fund the wallet with SOL before you start.** The manager wallet pays the rent and network fees for every account it creates. **Rent** is a refundable SOL deposit that Solana charges to store an account. Creating a vault costs about 0.012 SOL in rent. Each new strategy, Meteora position, and Phoenix account adds more. We suggest 0.1 SOL or more. Most rent comes back when you close the strategy or vault.
 
 ## Create a vault
 
