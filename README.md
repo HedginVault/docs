@@ -25,4 +25,4 @@ The API reference describes the manager bot API in `app/`. The SDK pages describ
 
 ## llms.txt
 
-`llms.txt` is the index that AI tools read. This repo keeps the only copy: it replaces the file Mintlify would generate, and the app redirects `hedgin.xyz/llms.txt` here. Keep its key facts and endpoint list in step with the API. When you add a page, add its link. The links assume the site is served at `https://docs.hedgin.xyz`.
+Mintlify generates `llms.txt` and `llms-full.txt` from the pages and their `description` fields. Do not add a hand-written `llms.txt`: it would replace the generated one. The app redirects `hedgin.xyz/llms.txt` here.
