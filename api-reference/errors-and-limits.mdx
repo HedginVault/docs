@@ -63,11 +63,11 @@ Every request counts against these limits. A rejected request does not use up an
 | --- | --- | --- |
 | Per IP address | All requests, checked before the API key | 600 per minute |
 | Per API key | All requests with a valid key | 120 per minute unless an administrator sets another limit for the key, from 1 to 600 per minute |
-| Per IP address, builds and quotes | `POST /transactions/{action}` and `GET /jupiter/quote` | 30 per 10 seconds, 100 per minute, and 300 per 15 minutes, all at once |
+| Per IP address, quotes | `GET /jupiter/quote` | 30 per 10 seconds, 100 per minute, and 300 per 15 minutes, all at once |
 | Per IP address, pool search | `GET /dlmm/pools` | 30 per 10 seconds, 100 per minute, and 300 per 15 minutes, all at once |
 | Per IP address, at the edge | All requests | About 20 per second |
 
-All limits refill continuously. The per-IP limit of 600 per minute is never lower than a key's limit, so a bot on one IP address reaches its key limit first. Builds and quotes also have their own per-IP limit, so a key limit above 100 per minute does not raise how many builds one IP address can make. Ask an administrator if your bot needs a different key limit. A change takes effect within a few seconds. Each server instance counts on its own, so treat these values as ceilings, not as a guaranteed quota.
+All limits refill continuously. The per-IP limit of 600 per minute is never lower than a key's limit, so a bot on one IP address reaches its key limit first. Quotes also have their own per-IP limit, so a key limit above 100 per minute does not raise how many quotes one IP address can make. Builds and sends have no limit of their own: only your key limit, the per-IP limit of 600 per minute, and the edge limit apply to them. Ask an administrator if your bot needs a different key limit. A change takes effect within a few seconds. Each server instance counts on its own, so treat these values as ceilings, not as a guaranteed quota.
 
 Status polling counts too. Poll every 2 seconds or slower.
 
