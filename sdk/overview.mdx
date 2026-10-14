@@ -1,9 +1,9 @@
 ---
 title: "SDK overview"
-description: "Install @hedginvault/sdk, create a client, and run a manager action from build to confirmation in one call."
+description: "Install @hedginxyz/sdk, create a client, and run a manager action from build to confirmation in one call."
 ---
 
-`@hedginvault/sdk` is a TypeScript client for the Hedgin manager API. It turns the API's build, sign, send, and confirm sequence into one call, and it refuses to sign any server-built transaction that could move funds out of the manager wallet.
+`@hedginxyz/sdk` is a TypeScript client for the Hedgin manager API. It turns the API's build, sign, send, and confirm sequence into one call, and it refuses to sign any server-built transaction that could move funds out of the manager wallet.
 
 The API still builds every transaction. The SDK calls the API, inspects what comes back, signs locally, sends, and tracks the result. The manager key never leaves your process.
 
@@ -13,15 +13,13 @@ The API still builds every transaction. The SDK calls the API, inspects what com
 
 ## Install
 
-The source is public at [github.com/HedginVault/sdk](https://github.com/HedginVault/sdk). The package is not published to npm yet, so install it straight from GitHub. Your package manager builds it during install:
+Install the SDK from npm. The source is public at [github.com/HedginVault/sdk](https://github.com/HedginVault/sdk).
 
 ```sh
-yarn add github:HedginVault/sdk @solana/web3.js
+yarn add @hedginxyz/sdk @solana/web3.js
 # or
-npm install github:HedginVault/sdk @solana/web3.js
+npm install @hedginxyz/sdk @solana/web3.js
 ```
-
-To pin a version, add a commit hash, for example `github:HedginVault/sdk#<commit>`. Without one, every fresh install takes the latest `main`.
 
 `@solana/web3.js` (`^1.98.4`) is a peer dependency. Install it yourself so the SDK and your code share one copy of `Keypair`, `PublicKey`, and `VersionedTransaction`.
 
@@ -38,7 +36,7 @@ Keep the key and the wallet keypair in your secret store. The examples read the 
 `createHedgeClient` returns a `HedgeClient`. `keypairSigner` wraps a `Keypair` as a `TransactionSigner`, and `keypairFromFile` reads a Solana CLI keypair file.
 
 ```ts
-import { createHedgeClient, keypairFromFile, keypairSigner } from "@hedginvault/sdk";
+import { createHedgeClient, keypairFromFile, keypairSigner } from "@hedginxyz/sdk";
 
 const hedge = createHedgeClient({ apiKey: process.env.HEDGE_API_KEY ?? "" });
 const signer = keypairSigner(keypairFromFile("/secure/path/manager.json"));
