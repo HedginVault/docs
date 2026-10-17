@@ -4784,7 +4784,9 @@
                 "type": [
                   "string",
                   "null"
-                ]
+                ],
+                "deprecated": true,
+                "description": "Always null. Vault strategy text was replaced by `tags`."
               },
               "description": {
                 "type": [
