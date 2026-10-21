@@ -5,6 +5,26 @@ description: "Manage a Hedgin vault from Telegram: wallets, reads, swaps, Meteor
 
 The Hedgin manager bot is a public Telegram bot that operates a vault through the [manager API](/api-reference/introduction). Each Telegram user keeps their own wallets in the bot. The bot reads vault state, builds transactions through the API, signs them with the active wallet, sends them, and shows live progress with Solscan links.
 
+```mermaid
+sequenceDiagram
+    actor U as You
+    participant B as Bot
+    participant S as SDK
+    participant A as Hedgin API
+    U->>B: Fill a form, tap Confirm
+    Note over B: The confirm button works once
+    B->>S: execute with the active wallet
+    S->>A: Build
+    A-->>S: Unsigned tx and ticket
+    Note over S: Inspect, then sign
+    S->>A: Send with ticket
+    A-->>S: Signature and receipt
+    S-->>B: Progress events
+    B-->>U: Live progress, Solscan links
+    S-->>B: Outcome
+    B-->>U: Result and next buttons
+```
+
 It runs on the same API and SDK as any other manager integration. If you want your key to stay in your own process, use the [TypeScript SDK](/sdk/overview) instead.
 
 <Warning>
@@ -78,7 +98,16 @@ If you paste something that looks like a private key anywhere other than the imp
 
 ## Trade and manage
 
-Every action opens a form, then a confirm screen, then runs. Fields you type into ask with a prompt. Answer in the chat or send `/cancel`. Amounts accept a number (`1.5`), a percent (`25%`), or `max`. Prices are the pool's quote token per base token.
+Every action follows the same path.
+
+```mermaid
+flowchart LR
+    A["Form<br/>(buttons and typed fields)"] --> B["Confirm screen"]
+    B --> C["Runs<br/>(live progress)"]
+    A -.->|"/cancel"| D["Stops typing<br/>keeps other values"]
+```
+
+Fields you type into ask with a prompt. Answer in the chat or send `/cancel`. Amounts accept a number (`1.5`), a percent (`25%`), or `max`. Prices are the pool's quote token per base token.
 
 The bot converts price ranges to bins. It shows the actual edge prices, the bin count, and which tokens the range can hold. It flags pasted tokens that Jupiter has not verified on the form and again on the confirm screen.
 
@@ -130,7 +159,7 @@ The bot looks up a pasted deposit mint through a vault the key already manages. 
 
 ## Key scopes per feature
 
-Every action needs the `send` scope plus its own action name. When a key lacks one, the bot names the missing action so you can ask the admin for it. See [Key scopes](/sdk/actions#key-scopes) for the full rule.
+Every action needs the `send` scope plus its own action name. When a key lacks one, the bot names the missing action so you can ask the admin for it. See [Key scopes](/sdk/reference#key-scopes) for the full rule.
 
 | Feature | Key actions |
 | --- | --- |
@@ -153,12 +182,14 @@ Every action needs the `send` scope plus its own action name. When a key lacks o
 
 The bot signs through the SDK, so it inherits the SDK's signing policy. The rules below are what you can rely on when you use it.
 
-- **Private chats only.** The bot ignores groups. When the operator sets an allowlist of Telegram user IDs, users outside it get no reply at all, so the bot does not reveal that it exists.
-- **Secrets are deleted.** The bot deletes the message that holds a pasted private key or API key before it does anything else. An exported key appears as a protected spoiler message that deletes itself after 60 seconds.
-- **Inspect before signing.** Every transaction in a batch must be v0, paid by the manager key, already signed by any other required signer, and call only the Hedge Vault program, ComputeBudget, Associated Token Account, Meteora DLMM, or Jupiter at the top level. The priority fee is capped at 100,000 microLamports per compute unit. The bot refuses anything else without signing. Phoenix onboarding is the one exception: a single transaction that calls only the Phoenix program, which Phoenix co-signs on submit. See [Execute and safety](/sdk/safety) for the policy in detail.
-- **Confirm first, one shot.** Every action shows a confirm screen. A confirm button works once. Each user runs only one action at a time.
-- **No blind retries.** The bot polls an ambiguous send by its receipt. It never rebuilds after one, because a rebuild could execute the action twice. When it cannot tell what happened, it says so and links the transaction.
-- **Buttons do not survive a restart.** Form and confirm buttons stop working when the bot restarts, and half-typed answers are forgotten. Send `/start` for fresh buttons.
+| Rule | What the bot does |
+| --- | --- |
+| Private chats only | The bot ignores groups. When the operator sets an allowlist of Telegram user IDs, users outside it get no reply at all, so the bot does not reveal that it exists. |
+| Secrets are deleted | The bot deletes the message that holds a pasted private key or API key before it does anything else. An exported key appears as a protected spoiler message that deletes itself after 60 seconds. |
+| Inspect before signing | Every transaction in a batch must be v0, paid by the manager key, already signed by any other required signer, and call only the Hedge Vault program, ComputeBudget, Associated Token Account, Meteora DLMM, or Jupiter at the top level. The priority fee is capped at 100,000 microLamports per compute unit. The bot refuses anything else without signing. Phoenix onboarding is the one exception: a single transaction that calls only the Phoenix program, which Phoenix co-signs on submit. See [Execute and safety](/sdk/safety) for the policy in detail. |
+| Confirm first, one shot | Every action shows a confirm screen. A confirm button works once. Each user runs only one action at a time. |
+| No blind retries | The bot polls an ambiguous send by its receipt. It never rebuilds after one, because a rebuild could execute the action twice. When it cannot tell what happened, it says so and links the transaction. |
+| Buttons do not survive a restart | Form and confirm buttons stop working when the bot restarts, and half-typed answers are forgotten. Send `/start` for fresh buttons. |
 
 <Note>
   By default the bot talks to the production API at `hedgin.xyz`, which runs on Solana mainnet. Every confirmed action moves real funds.

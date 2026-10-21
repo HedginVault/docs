@@ -11,15 +11,28 @@ Before you start, you need a vault you manage and a connected authority wallet. 
 
 Each token the vault buys gets a **Jupiter strategy**: a program record that tells the keeper to count that token in the vault's value. The deposit token never needs one, because the keeper always counts the idle balance.
 
-The first swap into a new token creates its strategy. That step costs a small, refundable rent and can need a second wallet approval. Later swaps into the same token reuse the strategy.
+```mermaid
+stateDiagram-v2
+    [*] --> Open: First swap into a new token
+    Open --> Open: Later swaps reuse it
+    Open --> Closed: Sell all and close
+    Closed --> [*]
+```
+
+| Event | What happens |
+| --- | --- |
+| First swap into a new token | Creates its strategy. Costs a small, refundable rent and can need a second wallet approval. |
+| Later swaps into the same token | Reuse the strategy. |
+| **Sell all & close**, or a normal swap that sells the full balance | Closes the strategy. |
 
 A swap can go in any direction:
 
-- From the deposit token into another token.
-- From another token back into the deposit token.
-- Between two non-deposit tokens, when the vault already tracks the token it sells.
-
-You cannot swap into the vault's own share token.
+| From | To | Allowed when |
+| --- | --- | --- |
+| Deposit token | Another token | Always |
+| Another token | Deposit token | Always |
+| Non-deposit token | Another non-deposit token | The vault already tracks the token it sells. |
+| Any token | The vault's own share token | Never |
 
 ## Swap a token
 
@@ -41,7 +54,15 @@ You cannot swap into the vault's own share token.
   </Step>
 </Steps>
 
-The program checks the result after Jupiter runs. It measures how many tokens the vault actually received. If that amount is below the quote minus the protocol's maximum slippage, the whole transaction fails and nothing changes.
+### How the program checks the result
+
+```mermaid
+flowchart TD
+    A["Jupiter runs the swap"] --> B["Program measures tokens<br/>the vault actually received"]
+    B --> C{"At least quote minus<br/>protocol max slippage?"}
+    C -- "Yes" --> D["Swap confirmed"]
+    C -- "No" --> E["Whole transaction fails.<br/>Nothing changes."]
+```
 
 If the button shows **Vault not operational**, the vault or the protocol is not in the Normal status. Swaps are blocked while reduce-only or paused.
 
@@ -55,11 +76,19 @@ To exit a token fully, sell all of it and close its strategy in one transaction:
 
 This step fails in two cases:
 
-- An open Meteora DLMM position or limit order still uses the token. Close the position or the order first.
-- Jupiter has no route for the token. The token stays in the vault, and its strategy stays open so the keeper keeps counting it.
-
-A normal swap that sells a token's full balance also closes its strategy.
+| Cause | Result | What to do |
+| --- | --- | --- |
+| An open Meteora DLMM position or limit order still uses the token. | The transaction fails. | Close the position or the order first. |
+| Jupiter has no route for the token. | The token stays in the vault, and its strategy stays open so the keeper keeps counting it. | Try again when a route exists. |
 
 ## Use a bot
 
-A bot can quote and swap through the [manager bot API](/api-reference/introduction). The actions are `jupiter/initialize`, `jupiter/swap`, and `jupiter/sweep`. A swap into a new token can return a second step that the bot must send after the first one confirms. The SDK and API reference describe the request fields.
+A bot can quote and swap through the [manager bot API](/api-reference/introduction).
+
+| Action | Use |
+| --- | --- |
+| `jupiter/initialize` | Create a Jupiter strategy. |
+| `jupiter/swap` | Swap. A swap into a new token can return a second step that the bot must send after the first one confirms. |
+| `jupiter/sweep` | Sell all and close. |
+
+The SDK and API reference describe the request fields.

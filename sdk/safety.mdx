@@ -7,15 +7,43 @@ A manager key can sign real transactions on Solana mainnet. The SDK is built so 
 
 ## What `execute` does
 
-For one `ActionRequest`, `execute` runs this loop:
+For one `ActionRequest`, `execute` runs this loop.
 
-1. **Build.** It calls the builder endpoint. The API returns one or more steps. Each step has an unsigned base64 v0 transaction, a simulation result, a `ticket`, and a `blockhash`.
-2. **Inspect.** It checks every transaction in the build against the [signing policy](#signing-policy). If any transaction fails, nothing in that build is signed or sent, and `execute` returns `refused`.
-3. **Sign and send.** It signs each transaction with your `TransactionSigner` and posts it with its `ticket`. The `ticket` is a short-lived (90 second) proof that the API built that exact message for your key.
-4. **Confirm.** It polls the transaction status until every sent transaction in the group is confirmed, one fails, or 120 seconds pass.
-5. **Continue.** If a step carried a `next` continuation, it builds that and repeats from step 1.
+```mermaid
+sequenceDiagram
+    participant S as SDK
+    participant A as Hedgin API
+    participant K as Your signer
+    participant C as Solana
+    S->>A: Build the action
+    A-->>S: Steps: unsigned v0 tx, simulation, ticket, blockhash
+    Note over S: Inspect every tx in the build
+    S->>K: signTransaction
+    K-->>S: Signed tx
+    S->>A: Send signed tx with its ticket
+    A->>C: Submit
+    A-->>S: Signature and receipt
+    loop Every 2 s, up to 120 s
+        S->>A: Status of receipt
+    end
+    Note over S: A step has next? Build it and repeat
+```
 
-`onProgress` receives an event at each stage: `{ kind: "building", action }`, `{ kind: "sent", signature, status }` where `status` is `"pending"` or `"unknown"`, and `{ kind: "confirmed", signature }`.
+| Stage | What happens |
+| --- | --- |
+| Build | The builder endpoint returns one or more steps. Each step has an unsigned base64 v0 transaction, a simulation result, a `ticket`, and a `blockhash`. |
+| Inspect | Every transaction in the build is checked against the [signing policy](#signing-policy). If any fails, nothing in that build is signed or sent, and `execute` returns `refused`. |
+| Sign and send | Each transaction is signed with your `TransactionSigner` and posted with its `ticket`. The `ticket` is a short-lived (90 second) proof that the API built that exact message for your key. |
+| Confirm | The SDK polls status until every sent transaction in the group is confirmed, one fails, or 120 seconds pass. |
+| Continue | If a step carried a `next` continuation, the SDK builds it and starts again at Build. |
+
+`onProgress` receives one event per stage:
+
+| Event | When |
+| --- | --- |
+| `{ kind: "building", action }` | Before each build. |
+| `{ kind: "sent", signature, status }` | After each send. `status` is `"pending"` or `"unknown"`. |
+| `{ kind: "confirmed", signature }` | After the transaction's group confirms. |
 
 ```ts
 const outcome = await hedge.execute(request, signer, {
@@ -25,30 +53,69 @@ const outcome = await hedge.execute(request, signer, {
 
 ### Batches and confirmation barriers
 
-A build can return several transactions. Steps marked `sendConcurrently` that sit next to each other go out together. Any other step is a barrier: `execute` sends it alone and waits for it to confirm before it sends the next step.
+A build can return several transactions. Steps marked `sendConcurrently` that sit next to each other form one group and go out together. Any other step is a barrier: it is sent alone, and the next group waits for it to confirm.
 
-Only a confirmed group lets the next group go out. If a group fails, later groups are never sent. Transactions from earlier groups have already landed, and they stay landed.
+```mermaid
+flowchart LR
+    subgraph G1["Group 1: sent together"]
+        S1["Step 1<br/>sendConcurrently"]
+        S2["Step 2<br/>sendConcurrently"]
+    end
+    subgraph G2["Group 2: barrier"]
+        S3["Step 3"]
+    end
+    subgraph G3["Group 3"]
+        S4["Step 4<br/>sendConcurrently"]
+    end
+    G1 -->|"all confirmed"| G2
+    G2 -->|"confirmed"| G3
+    G1 -.->|"one fails"| X["Stop.<br/>Later groups never sent"]
+```
+
+If a group fails, later groups are never sent. Transactions from earlier groups have already landed, and they stay landed.
 
 ### Continuations
 
 Some builders cannot finish in one build. A step then carries `next`, a builder path and body. `execute` builds `next` after the current batch confirms, and keeps going until no step has a `next`.
 
-The continuations are `dlmm/extend` (a position wider than 70 bins), `dlmm/add-range`, `dlmm/zap-out/swap`, and `jupiter/sweep` after a zap-out. A key needs the scope of each continuation it follows. See [Key scopes](/sdk/actions#key-scopes).
+| Continuation | When it appears |
+| --- | --- |
+| `dlmm/extend` | A position wider than 70 bins. |
+| `dlmm/add-range` | After `dlmm/extend`. |
+| `dlmm/zap-out/swap` | After a zap-out. |
+| `jupiter/sweep` | After a zap-out. |
 
-`execute` stops with the code `TooManySteps` after 12 builds. A longer chain means something is looping.
+A key needs the scope of each continuation it follows. See [Key scopes](/sdk/reference#key-scopes). `execute` stops with the code `TooManySteps` after 12 builds. A longer chain means something is looping.
 
 ## Outcomes
 
-`execute` returns an `Outcome` for every case the API and the network can explain. Four things decide which one.
+`execute` returns an `Outcome` for every case the API and the network can explain.
 
-| Situation | Outcome |
-| --- | --- |
-| Every transaction confirmed and no `next` remains. | `confirmed`. `created.vault` or `created.position` is set when the action made one. |
-| Inspection rejected a transaction in a build. | `refused`, with `reason`. |
-| The API rejected a build, the API rejected a send with an error below HTTP 500, a transaction failed on chain, or a blockhash expired. | `failed`, with `code` and `message`. An expired blockhash has the code `Expired`. |
-| A send timed out or returned HTTP 500 or above and no receipt came back, or confirmation passed 120 seconds. | `unresolved`, with the `pending` signatures. |
+```mermaid
+flowchart TD
+    B["Build and inspect"] -->|"inspection rejects a tx"| R["refused<br/>with reason"]
+    B -->|"API rejects the build"| F["failed<br/>with code and message"]
+    B --> S["Sign and send group"]
+    S -->|"API rejects a send<br/>below HTTP 500"| F
+    S -->|"timeout or HTTP 500+<br/>and no receipt"| U["unresolved<br/>with pending signatures"]
+    S --> P["Poll receipts"]
+    P -->|"fails on chain<br/>or blockhash expired"| F
+    P -->|"past 120 s"| U
+    P -->|"confirmed, next remains"| B
+    P -->|"confirmed, no next"| C["confirmed"]
+```
 
-When an API error stops a send, the SDK still settles the transactions it already sent in that group before it reports the error. They may land. So `failed` does not mean nothing happened. Read the vault state before you retry.
+An expired blockhash has the code `Expired`. On `confirmed`, `created.vault` or `created.position` is set when the action made one.
+
+When an API error stops a send, the SDK still settles the transactions it already sent in that group before it reports the error. They may land. So `failed` does not mean nothing happened.
+
+| Outcome | Was anything sent? | Call `execute` again right away? | What to do next |
+| --- | --- | --- | --- |
+| `confirmed` | Yes. Everything landed. | Not needed. | Use `signatures` and `created`. |
+| `refused` | No. | Yes, it is safe. | Read `reason`. |
+| `failed` | Maybe. An earlier transaction may have landed. | No. | Read vault state with the [read methods](/sdk/reference#vault-reads) first. |
+| `unresolved` | Yes. The result is unknown. | No. | Look up the `pending` signatures on an explorer. |
+| Error thrown while building | No. | Yes, it is safe. | Retry. |
 
 ```ts
 switch (outcome.kind) {
@@ -73,11 +140,13 @@ A transaction you sent is not a confirmed transaction. When a send times out or 
 
 If the send returned a receipt, the SDK polls that receipt every 2 seconds. If it returned no receipt, there is nothing to poll. When every open transaction in the group lacks a receipt, the outcome is `unresolved` at once.
 
-The SDK never rebuilds after an ambiguous send. A rebuild gets a fresh blockhash and a new signature, so it could execute the same action twice. Your code should follow the same rule:
+<Warning>
+  The SDK never rebuilds after an ambiguous send. A rebuild gets a fresh blockhash and a new signature, so it could execute the same action twice. Your code must follow the same rule:
 
-- On `unresolved`, look the signatures up on an explorer. Do not call `execute` again with the same request until you know what landed.
-- On `failed`, read vault state with the [read methods](/sdk/reads) first. An earlier transaction in the batch may have landed.
-- Call `execute` again without checking only when nothing was sent: after a `refused` outcome, or after an error thrown while building.
+  - On `unresolved`, look the signatures up on an explorer. Do not call `execute` again with the same request until you know what landed.
+  - On `failed`, read vault state first. An earlier transaction in the batch may have landed.
+  - Call `execute` again without checking only when nothing was sent: after a `refused` outcome, or after an error thrown while building.
+</Warning>
 
 ### What `execute` throws
 
@@ -90,18 +159,21 @@ Status polling errors are swallowed and retried until the deadline.
 
 ## Signing policy
 
-The API builds every transaction. The SDK does not trust that. Before it signs, every transaction in a build must:
+The API builds every transaction. The SDK does not trust that. It inspects the whole build before any part of it is sent, and a batch with one bad transaction is refused whole. The table compares this policy with the narrower [Phoenix onboarding policy](#phoenix-onboarding-policy).
 
-- be a v0 transaction paid by the signer's key;
-- already carry every other required signature, such as the new keypair of a DLMM position;
-- call only the Hedge Vault program, ComputeBudget, the Associated Token Account program, Meteora DLMM, or Jupiter at the top level;
-- set a priority fee at or below 100,000 microLamports per compute unit.
-
-The whole build is inspected before any part of it is sent. A batch with one bad transaction is refused whole.
+| Rule | `execute` (signing policy) | `onboardPhoenix` (onboarding policy) |
+| --- | --- | --- |
+| Transaction version | v0 | v0 |
+| Fee payer | The signer's key | The signer's key |
+| Other signatures | Every other required signature already present, such as the new keypair of a DLMM position | One missing: Phoenix signs after the manager |
+| Top-level programs | Hedge Vault, ComputeBudget, Associated Token Account, Meteora DLMM, Jupiter | Phoenix only (`EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih`) |
+| Priority fee | At or below 100,000 microLamports per compute unit | None. ComputeBudget is refused. |
+| Shape of the build | Any number of steps and `next` continuations | One non-empty transaction, no `next` |
+| Checked by | `inspectTransaction` | `inspectPhoenixOnboardTransaction` |
 
 Token movement happens by cross-program invocation inside the Hedge Vault program, so none of the allowed top-level programs can transfer funds out of the manager wallet. The manager pays only rent (for example, associated token accounts and DLMM bin arrays) and the capped priority fee.
 
-Change the cap with `maxComputeUnitPriceMicroLamports` in the [client options](/sdk/overview#client-options). Change the allowed program with `programId` only for a non-production deployment.
+Change the cap with `maxComputeUnitPriceMicroLamports` in the [client options](/sdk/reference#createhedgeclient). Change the allowed program with `programId` only for a non-production deployment.
 
 Use `inspectTransaction` directly to check a transaction yourself:
 
@@ -121,7 +193,7 @@ try {
 
 ### Phoenix onboarding policy
 
-`onboardPhoenix` uses a separate, narrower policy because Phoenix signs the transaction after the manager. The transaction must be v0, paid by the signer's key, and non-empty. Its top-level instructions may call only the Phoenix program (`EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih`). ComputeBudget is refused too, so no priority fee can be set at all. The build must be a single transaction with no `next`.
+`onboardPhoenix` uses a separate, narrower policy because Phoenix signs the transaction after the manager. The right-hand column of the table above lists its rules. No priority fee can be set at all.
 
 This is the only path that signs while another signature is still missing. `execute` refuses a direct Phoenix call and any missing co-signature.
 

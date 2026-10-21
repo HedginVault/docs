@@ -3,7 +3,7 @@ title: "Vaults, shares, and NAV"
 description: "How a Hedgin vault prices its shares, when requests settle, how fees are charged, and what the status and pause switches block."
 ---
 
-Every Hedgin vault answers one question every 4 hours: what is one share worth right now? This page explains how that answer is produced and why deposits, withdrawals, and fees all depend on it.
+Every Hedgin vault answers one question every 4 hours: what is one share worth right now? Deposits, withdrawals, and fees all depend on that answer.
 
 ## A vault is one token in, shares out
 
@@ -11,13 +11,15 @@ Each vault accepts exactly one token, called its **deposit token**. A USDC vault
 
 When you deposit, the vault gives you **shares**. A share is a token that represents your slice of the vault. If you hold 10% of all shares, you own 10% of everything the vault holds. Each vault has its own share token.
 
-The vault page shows these facts about a vault:
+The vault page shows these facts:
 
-- **Status**: whether the vault is open, reduce-only, or paused. The section [What the status and pause switches block](#what-the-status-and-pause-switches-block) explains each one.
-- **Total assets**: the vault's value at the last posted NAV, in the deposit token.
-- **NAV per share**: the value of one share, in the deposit token.
-- **Limits**: the deposit cap, the smallest deposit, and the smallest withdrawal.
-- **Fees**: the manager's performance fee and management fee.
+| Field | Meaning |
+| --- | --- |
+| **Status** | Whether the vault is open, reduce-only, or paused. See [What the status and pause switches block](#what-the-status-and-pause-switches-block). |
+| **Total assets** | The vault's value at the last posted NAV, in the deposit token. |
+| **NAV per share** | The value of one share, in the deposit token. |
+| **Limits** | The deposit cap, the smallest deposit, and the smallest withdrawal. |
+| **Fees** | The manager's performance fee and management fee. |
 
 The vault's name, logo, description, and tags are display information. They are not stored in the Solana program and do not affect how the vault works.
 
@@ -25,29 +27,44 @@ The vault's name, logo, description, and tags are display information. They are 
 
 **Net asset value (NAV)** is the total value of everything the vault holds. **NAV per share** is that total divided by the number of shares. A new vault starts at a NAV per share of exactly 1 deposit token.
 
-For example, a USDC vault holds tokens worth 110,000 USDC and has 100,000 shares. Its NAV per share is 1.10 USDC. A depositor who adds 1,100 USDC at that NAV receives 1,000 shares.
+```mermaid
+flowchart LR
+    A["Total value<br/>110,000 USDC"] --> N["NAV per share<br/>1.10 USDC"]
+    S["Shares<br/>100,000"] --> N
+    N --> D["Deposit 1,100 USDC<br/>receives 1,000 shares"]
+```
 
-The Hedgin keeper calculates NAV. The **keeper** is a Hedgin service that reads the vault's holdings from the chain, prices them, and posts the total to the Solana program. The keeper can post a value. It cannot move vault tokens.
+The **keeper** is a Hedgin service that calculates NAV. It reads the vault's holdings from the chain, prices them, and posts the total to the Solana program. The keeper can post a value. It cannot move vault tokens.
 
 ### What the keeper counts
 
-The keeper counts only holdings that the program tracks for the vault:
+The keeper counts only holdings that the program tracks for the vault.
 
-- The idle balance: deposit tokens sitting in the vault and not invested.
-- Each token the vault bought through a [Jupiter swap](/managers/jupiter-swaps).
-- Each [Meteora DLMM](/managers/meteora-dlmm) position, including its unclaimed trading fees.
-- Each Meteora DLMM limit order, including filled amounts and maker fees.
-- The vault's [Phoenix](/managers/phoenix-perps) account value, including open profit and loss. This value never counts below zero.
-
-Tokens that someone sends to a vault address outside these paths are not counted. Unclaimed Meteora farming rewards are not counted.
+| Counted | Not counted |
+| --- | --- |
+| The idle balance: deposit tokens sitting in the vault and not invested. | Tokens that someone sends to a vault address outside these paths. |
+| Each token the vault bought through a [Jupiter swap](/managers/jupiter-swaps). | Unclaimed Meteora farming rewards. |
+| Each [Meteora DLMM](/managers/meteora-dlmm) position, including its unclaimed trading fees. | |
+| Each Meteora DLMM limit order, including filled amounts and maker fees. | |
+| The vault's [Phoenix](/managers/phoenix-perps) account value, including open profit and loss. This value never counts below zero. | |
 
 The keeper converts every holding into the deposit token with Jupiter price data. All prices for one valuation come from one price request.
 
 ### Incomplete data stops the post
 
-If the keeper cannot price a token, cannot read an account, or finds a Phoenix market price older than about 10 minutes, it does not post. It never treats a missing value as zero. A wrong NAV would let one depositor gain at another's expense, so a late NAV is the safer failure. The keeper tries again on its next run.
+```mermaid
+flowchart LR
+    R["Keeper run"] --> Q{"Every token priced,<br/>every account read,<br/>Phoenix price under<br/>about 10 minutes old?"}
+    Q -- "no" --> S["Skip the post<br/>(retry next run)"]
+    Q -- "yes" --> P["Post NAV"]
+    P --> L{"Within the program's<br/>NAV move limit?"}
+    L -- "yes" --> OK["NAV lands"]
+    L -- "no" --> X["Rejected. Administrator<br/>reviews the vault"]
+```
 
-The program also limits how far NAV per share can move in one post. If a new value moves more than the limit that Hedgin sets, the program rejects it. A Hedgin administrator then reviews the vault before a new NAV can land. Requests wait during the review.
+The keeper never treats a missing value as zero. A wrong NAV would let one depositor gain at another's expense, so a late NAV is the safer failure.
+
+The program also limits how far NAV per share can move in one post. Hedgin sets that limit. After a rejection, a Hedgin administrator reviews the vault before a new NAV can land. Requests wait during the review.
 
 ## Requests settle on the next NAV
 
@@ -76,20 +93,42 @@ sequenceDiagram
     P->>D: Shares (deposit) or tokens (withdrawal)
 ```
 
+### A request's life
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Waiting: request created
+    Waiting --> Cancelled: you cancel
+    Waiting --> Locked: NAV posted in a later epoch
+    Locked --> Settled: settles in that NAV's epoch
+    Locked --> Locked: check fails, waits for next NAV
+    Waiting --> Refunded: administrator refunds
+    Locked --> Refunded: administrator refunds
+```
+
 ### A ready request can settle only in its NAV's epoch
 
-A request can settle only during the epoch in which its NAV was posted. If a request cannot settle in that window, it waits for the next NAV post. This rule stops share supply from changing between a valuation and its post.
+A request can settle only during the epoch in which its NAV was posted. If it cannot settle in that window, it waits for the next NAV post. This rule stops share supply from changing between a valuation and its post.
 
 A request fails to settle when a program check fails at that moment. Common causes:
 
-- The vault or protocol is paused, or the matching pause switch is on.
-- For a withdrawal, the vault's idle balance is smaller than the payout. The manager has to free cash from a strategy first. The keeper never closes a manager's positions to pay a withdrawal.
+| Cause | What happens |
+| --- | --- |
+| The vault or protocol is paused, or the matching pause switch is on | The request waits. |
+| For a withdrawal, the vault's idle balance is smaller than the payout | The manager has to free cash from a strategy first. The keeper never closes a manager's positions to pay a withdrawal. |
 
 The keeper tries again after each later NAV post.
 
 ### One open request per vault
 
-You can hold one deposit request and one withdrawal request per vault at a time. A second deposit in the same epoch adds to your open request. A deposit in a later epoch fails until the first request settles or you cancel it. Withdrawal requests follow the same rule.
+You can hold one deposit request and one withdrawal request per vault at a time.
+
+| You submit | Result |
+| --- | --- |
+| A second deposit in the same epoch | Adds to your open request. |
+| A deposit in a later epoch | Fails until the first request settles or you cancel it. |
+| Another withdrawal | Same rules as deposits. |
 
 ### Cancelling a request
 
@@ -103,9 +142,11 @@ A Hedgin administrator can refund a pending request, for example for compliance 
 
 Each vault has its own limits, set by its manager:
 
-- **Deposit cap**: the most the vault accepts. The cap counts total assets plus all pending deposits, so a deposit can fail because of other people's pending deposits.
-- **Minimum deposit**: the smallest deposit request.
-- **Minimum withdrawal**: the fewest shares in one withdrawal request. If your whole balance is below this minimum, you can still withdraw all of it.
+| Limit | Rule |
+| --- | --- |
+| **Deposit cap** | The most the vault accepts. The cap counts total assets plus all pending deposits, so a deposit can fail because of other people's pending deposits. |
+| **Minimum deposit** | The smallest deposit request. |
+| **Minimum withdrawal** | The fewest shares in one withdrawal request. If your whole balance is below this minimum, you can still withdraw all of it. |
 
 <Note>
 Hedgin's configuration also includes an **outflow limit**: the largest share of a vault's assets that withdrawals can pay out in one epoch. The current program version records outflows but does not enforce this limit. Today, withdrawals are limited by the vault's idle balance.
@@ -115,21 +156,50 @@ Hedgin's configuration also includes an **outflow limit**: the largest share of 
 
 Fees are charged when the keeper posts NAV. The program does not take tokens out of the vault. Instead, it creates new shares worth exactly the fee and holds them for the fee owner. This lowers each existing share's value by the fee amount. The manager claims these fee shares later.
 
-A vault has two manager fees:
+| Fee | Paid to | Rate | Charged on |
+| --- | --- | --- | --- |
+| Performance fee | Manager | At most 50% | Profit above the high-water mark |
+| Management fee | Manager | At most 5% a year | Total assets, in small parts at each NAV post, in proportion to the time since the previous post |
+| Platform performance share | Hedgin | At most 50% of the manager's performance fee | Comes out of the manager's fee, not out of depositors' money on top |
+| Platform management fee | Hedgin | At most 2% a year | Total assets. Depositors pay it in addition to the manager's fees |
 
-- **Performance fee**: a percentage of profit, at most 50%. It applies only to profit above the **high-water mark**, the highest NAV per share the vault has reached after fees. If the vault loses money and then recovers, the manager earns nothing until NAV per share passes its old peak.
-- **Management fee**: a yearly percentage of total assets, at most 5%. The program charges it in small parts at each NAV post, in proportion to the time since the previous post.
+The program enforces every limit in this table.
 
-Hedgin also charges two platform fees, within limits that the program enforces:
+### The high-water mark
 
-- A share of the manager's performance fee, at most 50% of it. This comes out of the manager's fee, not out of depositors' money on top.
-- A yearly platform management fee on total assets, at most 2%. Depositors pay it in addition to the manager's fees.
+The **high-water mark** is the highest NAV per share the vault has reached after fees. If the vault loses money and then recovers, the manager earns nothing until NAV per share passes its old peak.
 
 For example, a vault has a 20% performance fee and its high-water mark is 1.00. NAV per share rises to 1.10. The profit above the mark is 0.10 per share, so the performance fee is 0.02 per share. The manager's management fee and the platform's fee are charged at the same post.
 
+The chart below continues that example with only the performance fee. It is an illustration, not real vault data. One line is NAV per share after fees. The other is the high-water mark, which only rises.
+
+```mermaid
+xychart-beta
+    title "NAV per share after fees vs high-water mark"
+    x-axis ["Start", "Post 1", "Post 2", "Post 3", "Post 4"]
+    y-axis "USDC per share" 0.9 --> 1.15
+    line [1.00, 1.08, 0.95, 1.05, 1.12]
+    line [1.00, 1.08, 1.08, 1.08, 1.12]
+```
+
+| Post | Value before fee | High-water mark before | Performance fee | NAV per share after |
+| --- | --- | --- | --- | --- |
+| 1 | 1.10 | 1.00 | 20% of 0.10 = 0.02 | 1.08 (new mark) |
+| 2 | 0.95 | 1.08 | None, below the mark | 0.95 |
+| 3 | 1.05 | 1.08 | None, still below the mark | 1.05 |
+| 4 | 1.13 | 1.08 | 20% of 0.05 = 0.01 | 1.12 (new mark) |
+
 ### Fee increases wait 7 days
 
-A manager can lower fees at any time, and the lower fee applies immediately. A fee increase waits 7 days. The first NAV post after the 7 days applies it. The delay gives depositors time to withdraw before a higher fee starts.
+```mermaid
+flowchart LR
+    C["Manager changes a fee"] --> Q{"Lower or higher?"}
+    Q -- "lower" --> N["Applies immediately"]
+    Q -- "higher" --> W["Waits 7 days"]
+    W --> P["Applies at the first<br/>NAV post after that"]
+```
+
+The delay gives depositors time to withdraw before a higher fee starts.
 
 ## What the status and pause switches block
 
@@ -158,10 +228,12 @@ When the whole protocol is reduce-only, DLMM liquidity removal, DLMM fee claims,
 
 Separately, a manager has two **pause switches**:
 
-- The **deposit pause** blocks new deposit requests and the settlement of pending ones.
-- The **withdrawal pause** blocks new withdrawal requests and the settlement of pending ones.
+| Switch | Blocks new | Blocks settlement of pending | Blocks cancellation |
+| --- | --- | --- | --- |
+| **Deposit pause** | Deposit requests | Deposit requests | No |
+| **Withdrawal pause** | Withdrawal requests | Withdrawal requests | No |
 
-Neither switch blocks cancellation. A depositor can always cancel a request that no NAV has locked.
+A depositor can always cancel a request that no NAV has locked.
 
 ## Next steps
 

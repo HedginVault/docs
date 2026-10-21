@@ -3,7 +3,18 @@ title: "Hedgin documentation"
 description: "Hedgin runs Solana investment vaults with program-enforced custody. Learn how to deposit, manage a vault, or build a bot."
 ---
 
-Hedgin runs investment vaults on Solana. Depositors put one token, such as USDC, into a vault and receive shares. A whitelisted manager invests the vault through Jupiter swaps, Meteora DLMM liquidity, and Phoenix perpetuals. Every 4 hours, Hedgin values each vault, and waiting deposits and withdrawals settle at that price.
+Hedgin runs investment vaults on Solana. You deposit one token, such as USDC, and get vault shares. A whitelisted manager invests the vault. Every 4 hours Hedgin values the vault, and waiting deposits and withdrawals settle at that price.
+
+```mermaid
+flowchart LR
+    D["Depositor"] -- "deposit token" --> V["Vault<br/>(held by the Solana program)"]
+    V -- "shares" --> D
+    M["Manager"] -. "signs trades" .-> V
+    V <--> J["Jupiter swaps"]
+    V <--> L["Meteora DLMM"]
+    V <--> P["Phoenix perps"]
+    K["NAV keeper<br/>(every 4 hours)"] -. "posts value" .-> V
+```
 
 A Solana program holds the vault's tokens. The manager can trade them only through those three venues and cannot send them anywhere else. Depositors get tokens back only to their own wallet.
 

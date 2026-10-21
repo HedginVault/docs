@@ -43,39 +43,59 @@ SKIP  <check name>  <ms> ms  <detail>
 <n> passed, <n> failed, <n> skipped
 ```
 
-The process exits with code 1 when any check fails, or when the key is missing or malformed. Skipped checks do not change the exit code.
+| Result | Meaning | Exit code |
+| --- | --- | --- |
+| `PASS` | The answer matched the contract. | No effect |
+| `FAIL` | The API and the SDK disagree. | 1 when any check fails |
+| `SKIP` | The check could not run with this key or vault. | No effect |
+| Key missing or malformed | No check runs. | 1 |
+| No `FAIL` line | Every check passed or skipped. | 0 |
 
-A check is skipped, not failed, when it cannot run with this key or vault:
+A check is skipped, not failed, in these cases:
 
-- A history read gets `HistoryUnavailable` because the deployment has no history database.
-- The Phoenix read gets `PhoenixUnavailable` or `RpcUnavailable` because Phoenix's API is down.
-- The key lacks the `jupiter/swap` scope, or the vault lacks 0.01 of the deposit token for the build simulation.
-- The checker itself hit the rate limit (HTTP 429). Rerun after a minute.
+| Cause | Why |
+| --- | --- |
+| A history read gets `HistoryUnavailable` | The deployment has no history database. |
+| The Phoenix read gets `PhoenixUnavailable` or `RpcUnavailable` | Phoenix's API is down. |
+| The build check cannot run | The key lacks the `jupiter/swap` scope, or the vault lacks 0.01 of the deposit token for the build simulation. |
+| HTTP 429 | The checker itself hit the rate limit. Rerun after a minute. |
 
 ## What it checks
 
 The checker runs the first group once, then the second group for each vault.
 
-**Without a vault**
+```mermaid
+flowchart TD
+    K["Check HEDGE_API_KEY format"] -->|"missing or malformed"| E["Exit 1<br/>no checks run"]
+    K --> B["Without a vault<br/>runs once"]
+    B --> V["For each vault<br/>first three only"]
+    V -->|"with --build"| D["Unsigned swap build"]
+    V --> R["Report and summary"]
+    D --> R
+    R -->|"any FAIL"| X1["Exit 1"]
+    R -->|"no FAIL"| X0["Exit 0"]
+```
 
-- A request with no key, a wrong secret, or a malformed `Authorization` header returns 401.
-- An unknown route returns 404.
-- `GET /vaults` matches the contract.
-- Holdings for a random vault address return 403 or 404, and for an invalid address return 400.
-- A forged status receipt returns 400 or 403.
-
-**For each vault**
-
-- Holdings, strategies, vault detail, NAV history, request queue, strategy history, and the Phoenix view match their schemas.
-- A NAV history request with `limit=0` returns 400.
-- A one-token Jupiter quote and the deposit token's detail match their schemas, and an unknown mint returns 404.
-- Bad quote requests return 400: zero slippage, a decimal amount, the same mint on both sides, and a quote that does not involve the deposit mint.
-- Pool search matches its schema, the first pool's detail has an active bin, and an empty search query returns 400.
-
-**With `--build`**
-
-- A swap body that includes `payer` returns 400, because the API sets the payer from the key.
-- An unsigned swap build returns a transaction and ticket, and each step's `blockhash` equals the transaction's recent blockhash.
+<Tabs>
+  <Tab title="Without a vault">
+    - A request with no key, a wrong secret, or a malformed `Authorization` header returns 401.
+    - An unknown route returns 404.
+    - `GET /vaults` matches the contract.
+    - Holdings for a random vault address return 403 or 404, and for an invalid address return 400.
+    - A forged status receipt returns 400 or 403.
+  </Tab>
+  <Tab title="For each vault">
+    - Holdings, strategies, vault detail, NAV history, request queue, strategy history, and the Phoenix view match their schemas.
+    - A NAV history request with `limit=0` returns 400.
+    - A one-token Jupiter quote and the deposit token's detail match their schemas, and an unknown mint returns 404.
+    - Bad quote requests return 400: zero slippage, a decimal amount, the same mint on both sides, and a quote that does not involve the deposit mint.
+    - Pool search matches its schema, the first pool's detail has an active bin, and an empty search query returns 400.
+  </Tab>
+  <Tab title="With --build">
+    - A swap body that includes `payer` returns 400, because the API sets the payer from the key.
+    - An unsigned swap build returns a transaction and ticket, and each step's `blockhash` equals the transaction's recent blockhash.
+  </Tab>
+</Tabs>
 
 For every expected error, the checker also confirms the body is the documented `{ error: { code, message } }` shape and does not leak internals: no `logs`, stack traces, `Program log:` lines, file paths, or `node_modules`.
 
