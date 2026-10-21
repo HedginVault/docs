@@ -1,0 +1,382 @@
+---
+title: "Examples"
+description: "Recipes for common manager tasks: read a vault, swap with Jupiter, run Meteora DLMM positions and limit orders, trade Phoenix perpetuals, and administer a vault."
+---
+
+Each recipe below is one task, written as a short async snippet. They focus on the order of calls and the fields that matter. For every parameter and return type, see the [Reference](/sdk/reference).
+
+## Setup
+
+Every recipe assumes this setup. `vault` is the address of a vault your key manages. Where a recipe uses `lbPair` (a DLMM pool) or `position` (a DLMM position), it is an address you already read with `searchPools` or `getStrategies`.
+
+```ts
+import { createHedgeClient, keypairFromFile, keypairSigner } from "@hedginxyz/sdk";
+
+const apiKey = process.env.HEDGE_API_KEY;
+if (!apiKey) throw new Error("Set HEDGE_API_KEY");
+
+const hedge = createHedgeClient({ apiKey });
+const signer = keypairSigner(keypairFromFile("/secure/path/manager.json"));
+
+const [first] = await hedge.listVaults();
+if (!first) throw new Error("This key manages no vaults");
+const vault = first.address;
+```
+
+<Warning>
+  These recipes run against Solana mainnet by default. Each `execute` call signs and sends real transactions.
+</Warning>
+
+## Check a vault's state
+
+Read what the vault holds and which strategies are open. A token without a price makes `holdings.partial` true. A missing value is not zero.
+
+```ts
+import { formatUnits } from "@hedginxyz/sdk";
+
+const holdings = await hedge.getHoldings(vault);
+if (holdings.partial) console.warn("Unpriced tokens:", holdings.unpriced);
+for (const row of holdings.tokens) {
+  console.log(row.token.symbol, formatUnits(row.amount, row.token.decimals));
+}
+
+for (const strategy of await hedge.getStrategies(vault)) {
+  switch (strategy.type) {
+    case "jupiter":
+      console.log("Holds", strategy.symbol, strategy.vaultBalance);
+      break;
+    case "dlmm":
+      console.log("Position", strategy.position, strategy.lowerPrice, "to", strategy.upperPrice);
+      break;
+    case "dlmm_limit_order":
+      console.log("Limit order", strategy.limitOrder, strategy.side);
+      break;
+    case "phoenix":
+      console.log("Phoenix equity", strategy.equity, "leverage", strategy.leverage);
+      break;
+    case "unreadable":
+      console.warn(strategy.protocol, strategy.reason);
+      break;
+  }
+}
+```
+
+## Quote and swap with Jupiter
+
+Before a vault can hold a token, it needs a Jupiter strategy for that token. Open it once, quote, then swap.
+
+1. Look up the token and warn if Jupiter has not verified it.
+2. Open the token's Jupiter strategy with `jupiter/initialize`. Skip this when it already exists.
+3. Quote the swap with `getQuote`.
+4. Run `jupiter/swap` with the same amount and slippage.
+
+```ts
+import { parseUnits } from "@hedginxyz/sdk";
+
+const SOL = "So11111111111111111111111111111111111111112";
+const holdings = await hedge.getHoldings(vault);
+const usdc = holdings.depositToken;
+
+const token = await hedge.getToken(vault, SOL);
+if (token.verified !== true) console.warn(`${token.symbol} is not verified by Jupiter`);
+
+const strategies = await hedge.getStrategies(vault);
+if (!strategies.some((s) => s.type === "jupiter" && s.targetMint === SOL)) {
+  await hedge.execute({ action: "jupiter/initialize", vault, targetMint: SOL }, signer);
+}
+
+const amount = parseUnits("25", usdc.decimals);
+const quote = await hedge.getQuote({ vault, inputMint: usdc.mint, outputMint: SOL, amount, slippageBps: 50 });
+console.log("Expect", quote.outAmount, "via", quote.routeLabels.join(" > "));
+
+const outcome = await hedge.execute(
+  { action: "jupiter/swap", vault, sourceMint: usdc.mint, destinationMint: SOL, amount, slippageBps: 50 },
+  signer,
+);
+```
+
+To sell a token back to the deposit mint and close its strategy in one transaction, sweep it:
+
+```ts
+await hedge.execute({ action: "jupiter/sweep", vault, mint: SOL, slippageBps: 100 }, signer);
+```
+
+<Tip>
+  The API refuses `jupiter/sweep` with HTTP 409 while an open DLMM position or limit order still uses the token. Close those first.
+</Tip>
+
+## Open a DLMM position by price
+
+Find a pool, turn a price range into bins with `binRangeForPrices`, and open the position. Prices are token Y per token X.
+
+```ts
+import { binRangeForPrices, parseUnits } from "@hedginxyz/sdk";
+
+const page = await hedge.searchPools(vault, "SOL-USDC");
+const lbPair = page.pools[0]?.address;
+if (!lbPair) throw new Error("No pool found");
+
+const pool = await hedge.getPool(vault, lbPair);
+const range = binRangeForPrices(pool, 140, 160);
+console.log(range.binCount, "bins, accepts", range.sides);
+
+const outcome = await hedge.execute(
+  {
+    action: "dlmm/open",
+    vault,
+    lbPair,
+    lowerBinId: range.lowerBinId,
+    upperBinId: range.upperBinId, // exclusive
+    amountX: "0",
+    amountY: parseUnits("100", pool.tokenY.decimals),
+    shape: "spot",
+    maxActiveBinSlippage: 10,
+  },
+  signer,
+);
+```
+
+`range.sides` tells you which token the range can take. A range entirely below the active bin takes only token Y, and a range entirely above it takes only token X. A range wider than 70 bins becomes several transactions, which `execute` follows on its own.
+
+To create an empty position first and fill it later, use `dlmm/initialize` and read the new address from the outcome:
+
+```ts
+const created = await hedge.execute({ action: "dlmm/initialize", vault, lbPair, width: 21 }, signer);
+const position = created.kind === "confirmed" ? created.created?.position : undefined;
+```
+
+## Add and remove liquidity
+
+Add to every bin of a position, or to an inclusive sub-range of it. Remove a share of liquidity in basis points.
+
+```ts
+await hedge.execute(
+  { action: "dlmm/add", vault, position, amountX: "0", amountY: "1000000", shape: "curve", maxActiveBinSlippage: 10 },
+  signer,
+);
+
+await hedge.execute(
+  { action: "dlmm/add", vault, position, amountX: "0", amountY: "1000000", shape: "spot", maxActiveBinSlippage: 10, lowerBinId: -5, upperBinId: 5 },
+  signer,
+);
+
+await hedge.execute({ action: "dlmm/remove", vault, position, bpsToRemove: 5000 }, signer);
+```
+
+## Claim fees, zap out, and close
+
+```ts
+await hedge.execute({ action: "dlmm/claim-fee", vault, position }, signer);
+
+// Removes all liquidity and swaps the non-deposit token back, following continuations.
+await hedge.execute({ action: "dlmm/zap-out", vault, position, slippageBps: 100 }, signer);
+
+// Removes everything, claims fees, and closes the position and its strategy.
+await hedge.execute({ action: "dlmm/close", vault, position }, signer);
+```
+
+## Flip one side of a position
+
+`dlmm/flip` removes the liquidity from a bin range and re-adds that token there as Bid-Ask, in one transaction. The range must hold only one token, so use `flipSide` and `flipRange` to compute it from the position and the active bin.
+
+```ts
+import { flipRange, flipSide } from "@hedginxyz/sdk";
+
+const strategy = (await hedge.getStrategies(vault)).find((s) => s.type === "dlmm" && s.position === position);
+if (strategy?.type === "dlmm" && strategy.lowerBinId !== undefined && strategy.upperBinId !== undefined && strategy.activeBinId !== undefined) {
+  const { depositToken } = await hedge.getHoldings(vault);
+  const side = flipSide(strategy.tokenX.mint, depositToken.mint);
+  const range = flipRange({ lowerBinId: strategy.lowerBinId, upperBinId: strategy.upperBinId }, strategy.activeBinId, side);
+  if (range) {
+    await hedge.execute(
+      { action: "dlmm/flip", vault, position, ...range, activeBinId: strategy.activeBinId, maxActiveBinSlippage: 10 },
+      signer,
+    );
+  }
+}
+```
+
+## Place a DLMM limit order
+
+An ask rests token X in bins above the active bin and sells it for token Y. A bid rests token Y in bins below the active bin and buys token X. List 1 to 50 bins in strictly increasing order.
+
+```ts
+import { parseUnits } from "@hedginxyz/sdk";
+
+const pool = await hedge.getPool(vault, lbPair);
+const perBin = parseUnits("0.25", pool.tokenX.decimals);
+
+await hedge.execute(
+  {
+    action: "dlmm/limit-order/place",
+    vault,
+    lbPair,
+    side: "ask",
+    bins: [1, 2, 3].map((offset) => ({ binId: pool.activeBinId + offset, amount: perBin })),
+  },
+  signer,
+);
+```
+
+Fills and fees stay in the order until you cancel it. Read the order from `getStrategies`, then cancel some bins or all of them. Once the order is empty, its strategy closes in the same transaction.
+
+```ts
+const order = (await hedge.getStrategies(vault)).find((s) => s.type === "dlmm_limit_order" && s.lbPair === lbPair);
+if (order?.type === "dlmm_limit_order") {
+  const filled = order.bins.filter((bin) => bin.status === "filled" && !bin.empty).map((bin) => bin.binId);
+  if (filled.length > 0) {
+    await hedge.execute({ action: "dlmm/limit-order/cancel", vault, limitOrder: order.limitOrder, bins: filled }, signer);
+  }
+
+  // Without `bins`, cancels every bin that still holds anything.
+  await hedge.execute({ action: "dlmm/limit-order/cancel", vault, limitOrder: order.limitOrder }, signer);
+}
+```
+
+## Trade Phoenix perpetuals
+
+Phoenix needs a USDC vault. Set it up once, fund collateral, then trade.
+
+1. Record the Phoenix strategy with `phoenix/initialize`.
+2. Register the trader with `onboardPhoenix`. Phoenix co-signs this transaction, so it has its own method.
+3. Move USDC into collateral with `phoenix/deposit`.
+
+```ts
+const phoenix = await hedge.getPhoenix(vault);
+if (!phoenix.usdcVault) throw new Error("Phoenix needs a USDC deposit mint");
+
+if (phoenix.status === "none") await hedge.execute({ action: "phoenix/initialize", vault }, signer);
+if (phoenix.status !== "ready") await hedge.onboardPhoenix(vault, signer);
+
+await hedge.execute({ action: "phoenix/deposit", vault, amount: "10000000" }, signer);
+```
+
+Place a market order with a take-profit and stop-loss, or a post-only limit order. `size` and prices are decimals, not base units.
+
+```ts
+await hedge.execute(
+  {
+    action: "phoenix/order",
+    vault,
+    symbol: "SOL",
+    side: "long",
+    size: "0.5",
+    reduceOnly: false,
+    order: { type: "market", slippageBps: 100 },
+    tpSl: { takeProfit: "180", stopLoss: "130" },
+  },
+  signer,
+);
+
+await hedge.execute(
+  {
+    action: "phoenix/order",
+    vault,
+    symbol: "SOL",
+    side: "short",
+    size: "0.5",
+    reduceOnly: false,
+    order: { type: "limit", price: "150.25", postOnly: true },
+  },
+  signer,
+);
+```
+
+Move or remove the take-profit and stop-loss later with `phoenix/tpsl`. A `null` price removes that leg.
+
+```ts
+await hedge.execute({ action: "phoenix/tpsl", vault, symbol: "SOL", takeProfit: "190", stopLoss: null }, signer);
+```
+
+Cancel resting orders, close out, and withdraw collateral:
+
+```ts
+const { openOrders } = await hedge.getPhoenix(vault);
+const first = openOrders?.[0];
+if (first) {
+  await hedge.execute(
+    { action: "phoenix/cancel", vault, symbol: first.symbol, orders: [{ priceInTicks: first.priceInTicks, orderSequenceNumber: first.orderSequenceNumber }] },
+    signer,
+  );
+}
+await hedge.execute({ action: "phoenix/cancel", vault, symbol: "SOL", orders: "all" }, signer);
+
+await hedge.execute(
+  { action: "phoenix/order", vault, symbol: "SOL", side: "short", size: "0.5", reduceOnly: true, order: { type: "market", slippageBps: 100 }, disarmTpSl: true },
+  signer,
+);
+
+await hedge.execute({ action: "phoenix/withdraw", vault, amount: "5000000" }, signer);
+// After a queued withdrawal is delivered, unwrap it into USDC.
+await hedge.execute({ action: "phoenix/sweep", vault }, signer);
+```
+
+`openOrders` is `null` when Phoenix's API is down. Handle `null` before you read it.
+
+## Create and update a vault
+
+`vault/initialize` needs a key that is not limited to specific vaults. Fees are basis points. Caps and minimums are base units.
+
+```ts
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+const outcome = await hedge.execute(
+  {
+    action: "vault/initialize",
+    name: "My vault",
+    depositMint: USDC,
+    performanceFeeBps: 1000,
+    managementFeeBps: 100,
+    depositCap: "1000000000000",
+    minDeposit: "1000000",
+    minWithdrawalShares: "1000000",
+  },
+  signer,
+);
+const newVault = outcome.kind === "confirmed" ? outcome.created?.vault : undefined;
+```
+
+`vault/update` changes only the fields you pass:
+
+```ts
+await hedge.execute({ action: "vault/update", vault, depositPaused: true }, signer);
+await hedge.execute({ action: "vault/update", vault, status: "reduceOnly" }, signer);
+await hedge.execute({ action: "vault/claim-fee", vault }, signer);
+```
+
+## Handle every outcome
+
+A bot should treat each `Outcome` differently. Never resend after `unresolved`, and read state before you retry after `failed`.
+
+```ts
+import type { ActionRequest } from "@hedginxyz/sdk";
+
+async function run(request: ActionRequest) {
+  const outcome = await hedge.execute(request, signer, {
+    onProgress: (progress) => console.log(progress.kind, progress),
+  });
+  switch (outcome.kind) {
+    case "confirmed":
+      return outcome;
+    case "refused":
+      throw new Error(`Refused to sign: ${outcome.reason}`);
+    case "failed":
+      throw new Error(`${outcome.code}: ${outcome.message} (already sent: ${outcome.signatures.join(", ")})`);
+    case "unresolved":
+      throw new Error(`Unknown result. Check before retrying: ${outcome.pending.join(", ")}`);
+  }
+}
+```
+
+## Use a custom signer
+
+A `TransactionSigner` is any object with a `publicKey` and a `signTransaction` method. A hardware wallet or a KMS can sign instead of a local keypair. The signer must add its signature and keep the signatures already on the transaction.
+
+```ts
+import { PublicKey, type VersionedTransaction } from "@solana/web3.js";
+import type { TransactionSigner } from "@hedginxyz/sdk";
+
+function kmsSigner(manager: string, signWithKms: (tx: VersionedTransaction) => Promise<VersionedTransaction>): TransactionSigner {
+  return { publicKey: new PublicKey(manager), signTransaction: signWithKms };
+}
+```

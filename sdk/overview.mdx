@@ -1,119 +1,71 @@
 ---
-title: "SDK overview"
-description: "Install @hedginxyz/sdk, create a client, and run a manager action from build to confirmation in one call."
+title: "Overview"
+description: "@hedginxyz/sdk is a TypeScript client for the Hedgin manager API. It runs a manager action from build to confirmation in one call and refuses to sign unsafe transactions."
 ---
 
-`@hedginxyz/sdk` is a TypeScript client for the Hedgin manager API. It turns the API's build, sign, send, and confirm sequence into one call, and it refuses to sign any server-built transaction that could move funds out of the manager wallet.
+`@hedginxyz/sdk` lets a bot or script manage a Hedgin vault: swap with Jupiter, provide liquidity on Meteora DLMM, trade Phoenix perpetuals, and administer the vault. One call runs each action from build to confirmation.
 
-The API still builds every transaction. The SDK calls the API, inspects what comes back, signs locally, sends, and tracks the result. The manager key never leaves your process.
+The API builds every transaction. The SDK inspects what comes back, signs it locally with your manager wallet, sends it, and tracks the result. The wallet key never leaves your process, and the SDK refuses to sign any transaction that could move funds out of the manager wallet.
 
 <Note>
-  The SDK targets the manager API described in the [API reference](/api-reference/introduction). Use it when you run a bot or script that manages a vault. To click through the same actions, use the [Telegram bot](/managers/telegram-bot).
+  Prefer clicking to coding? The [Telegram bot](/managers/telegram-bot) runs the same actions from a chat. For raw HTTP, see the [API reference](/api-reference/introduction).
 </Note>
 
-## Install
+## How it works
 
-Install the SDK from npm. The source is public at [github.com/HedginVault/sdk](https://github.com/HedginVault/sdk).
+<Steps>
+  <Step title="Build">
+    `execute` sends your action to the manager API. The API builds and simulates one or more unsigned transactions.
+  </Step>
+  <Step title="Inspect">
+    The SDK checks every transaction against its signing policy before it signs anything. One bad transaction refuses the whole build.
+  </Step>
+  <Step title="Sign and send">
+    Your `TransactionSigner` signs locally. The SDK sends each transaction with a short-lived ticket that proves the API built it.
+  </Step>
+  <Step title="Confirm">
+    The SDK polls until every transaction lands or fails, follows multi-step continuations, and returns one typed `Outcome`.
+  </Step>
+</Steps>
 
-```sh
-yarn add @hedginxyz/sdk @solana/web3.js
-# or
-npm install @hedginxyz/sdk @solana/web3.js
-```
-
-`@solana/web3.js` (`^1.98.4`) is a peer dependency. Install it yourself so the SDK and your code share one copy of `Keypair`, `PublicKey`, and `VersionedTransaction`.
-
-The SDK builds to CommonJS and uses the global `fetch` and `AbortSignal.timeout`, so it needs Node 18 or later. It has two runtime dependencies, `zod` and `bs58`.
-
-## Get an API key
-
-A manager key looks like `hv1_<id>_<secret>`. A Hedgin admin issues it from the admin dashboard. Each key is bound to one manager wallet and carries a list of allowed actions, called scopes. See [Key scopes](/sdk/actions#key-scopes) for what each SDK call needs.
-
-Keep the key and the wallet keypair in your secret store. The examples read the API key from `HEDGE_API_KEY` and the keypair from a Solana CLI JSON file.
-
-## Create a client and run an action
-
-`createHedgeClient` returns a `HedgeClient`. `keypairSigner` wraps a `Keypair` as a `TransactionSigner`, and `keypairFromFile` reads a Solana CLI keypair file.
-
-```ts
-import { createHedgeClient, keypairFromFile, keypairSigner } from "@hedginxyz/sdk";
-
-const hedge = createHedgeClient({ apiKey: process.env.HEDGE_API_KEY ?? "" });
-const signer = keypairSigner(keypairFromFile("/secure/path/manager.json"));
-
-const [vault] = await hedge.listVaults();
-if (!vault) throw new Error("This key manages no vaults");
-const holdings = await hedge.getHoldings(vault.address);
-
-const outcome = await hedge.execute(
-  {
-    action: "jupiter/swap",
-    vault: vault.address,
-    sourceMint: holdings.depositToken.mint,
-    destinationMint: "So11111111111111111111111111111111111111112",
-    amount: "1000000", // base units: 1 USDC
-    slippageBps: 50,
-  },
-  signer,
-  { onProgress: (progress) => console.log(progress) },
-);
-console.log(outcome.kind);
-```
-
-`execute` builds the transaction, inspects it, signs it, sends it, and polls until it lands or fails. The result is an `Outcome`.
-
-### Client options
-
-`createHedgeClient` takes a `HedgeClientOptions` object.
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `apiKey` | `string` | Required | The `hv1_…` manager key. Sent as a bearer token. |
-| `baseUrl` | `string` | `https://hedgin.xyz` | The site origin. The API base URL ending in `/api/external/v1` also works. |
-| `programId` | `string` | `HEDGE_VAULT_PROGRAM_ID` | The Hedge Vault program the signing policy allows. Override only for a non-production deployment. |
-| `maxComputeUnitPriceMicroLamports` | `bigint` | `100_000n` | The highest priority fee the SDK signs, in microLamports per compute unit. |
-| `fetch` | `typeof fetch` | Global `fetch` | A replacement `fetch`, for tests or a proxy. |
-
-```ts
-const hedge = createHedgeClient({
-  apiKey: process.env.HEDGE_API_KEY ?? "",
-  baseUrl: "https://hedgin.xyz",
-  maxComputeUnitPriceMicroLamports: 50_000n,
-});
-```
-
-Reads time out after 10 seconds and builders after 30 seconds. A builder simulates on chain and can call Jupiter, so it gets more time.
-
-## Read the outcome
-
-`execute` and `onboardPhoenix` return an `Outcome`. Check `outcome.kind` before you act on anything else.
-
-| Kind | Meaning | What to do |
-| --- | --- | --- |
-| `confirmed` | Every transaction landed. `created` holds the new `vault` or `position` address when the action made one. | Done. |
-| `refused` | The API built a transaction the SDK will not sign. Nothing was sent. `reason` says why. | Report it. Do not bypass the policy. |
-| `failed` | The API rejected the request, or a transaction failed on chain. `code` and `message` say why. | Earlier transactions in a batch may have landed. Read state before you retry. |
-| `unresolved` | A transaction was sent, but its result is unknown after 120 seconds. `pending` lists the signatures. | Look the signatures up on an explorer. Do not resend. |
-
-Every kind carries `signatures`, the signatures of everything sent so far. See [Execute and safety](/sdk/safety) for how `execute` reaches each outcome and why it never rebuilds after an ambiguous send.
-
-## Amounts are strings
-
-Token amounts cross JSON as base-unit integer strings, such as `"1000000"` for 1 USDC. The SDK types them as `BaseUnitString` and never uses a JavaScript `number` for an amount. Convert display values with `parseUnits` and `formatUnits`. See [Units and helpers](/sdk/reads#units-and-helpers).
-
-## Where to go next
+## Features
 
 <CardGroup cols={2}>
-  <Card title="Reads" href="/sdk/reads">
-    Every read method, with its route and return type.
+  <Card title="One call per action" icon="bolt">
+    Jupiter, Meteora DLMM, Phoenix, and vault admin actions, each typed per builder.
   </Card>
-  <Card title="Actions" href="/sdk/actions">
-    Every action that `execute` runs, and the key scope each needs.
+  <Card title="Safe signing" icon="shield-check">
+    A local policy refuses wrong payers, unknown programs, and high priority fees.
   </Card>
-  <Card title="Execute and safety" href="/sdk/safety">
+  <Card title="Honest outcomes" icon="circle-check">
+    `confirmed`, `refused`, `failed`, or `unresolved`. It never resends a transaction with an unknown result.
+  </Card>
+  <Card title="Exact amounts" icon="calculator">
+    Amounts are base-unit strings, never JavaScript numbers. Unit and DLMM price helpers included.
+  </Card>
+</CardGroup>
+
+## TypeScript SDK
+
+<CardGroup cols={3}>
+  <Card title="Getting started" icon="rocket" href="/sdk/getting-started">
+    Install, create a client, and run your first action.
+  </Card>
+  <Card title="Examples" icon="code" href="/sdk/examples">
+    Recipes for each protocol and for handling outcomes.
+  </Card>
+  <Card title="Reference" icon="book" href="/sdk/reference">
+    Every method, action, helper, type, and error.
+  </Card>
+</CardGroup>
+
+## Guides
+
+<CardGroup cols={2}>
+  <Card title="Execute and safety" icon="lock" href="/sdk/safety">
     The signing policy, batches, continuations, and unknown outcomes.
   </Card>
-  <Card title="API checker" href="/sdk/api-checker">
+  <Card title="API checker" icon="stethoscope" href="/sdk/api-checker">
     Probe a live API for drift from the SDK's schemas.
   </Card>
 </CardGroup>

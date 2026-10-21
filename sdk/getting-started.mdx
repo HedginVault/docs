@@ -1,0 +1,167 @@
+---
+title: "Getting started"
+description: "Install @hedginxyz/sdk, create a client, read a vault, and run your first manager action."
+---
+
+<CardGroup cols={2}>
+  <Card title="TypeScript SDK" icon="github" href="https://github.com/HedginVault/sdk">
+    Source code, issues, and the test suite.
+  </Card>
+  <Card title="npm package" icon="npm" href="https://www.npmjs.com/package/@hedginxyz/sdk">
+    `@hedginxyz/sdk` on the npm registry.
+  </Card>
+</CardGroup>
+
+## Installation
+
+Install the SDK and its peer dependency, `@solana/web3.js`.
+
+<CodeGroup>
+
+```sh yarn
+yarn add @hedginxyz/sdk @solana/web3.js
+```
+
+```sh npm
+npm install @hedginxyz/sdk @solana/web3.js
+```
+
+```sh pnpm
+pnpm add @hedginxyz/sdk @solana/web3.js
+```
+
+</CodeGroup>
+
+`@solana/web3.js` (`^1.98.4`) is a peer dependency. Install it yourself so the SDK and your code share one copy of `Keypair`, `PublicKey`, and `VersionedTransaction`.
+
+The SDK builds to CommonJS and uses the global `fetch` and `AbortSignal.timeout`. It needs Node 18 or later. Its only runtime dependencies are `zod` and `bs58`.
+
+## Get an API key
+
+A manager key looks like `hv1_<id>_<secret>`. A Hedgin admin issues it from the admin dashboard. Each key is bound to one manager wallet and lists the actions it may run, called scopes. See [Key scopes](/sdk/reference#key-scopes) for what each call needs.
+
+Keep the key and the wallet keypair in your secret store. The examples on these pages read the key from `HEDGE_API_KEY` and the keypair from a Solana CLI JSON file.
+
+## Initialization
+
+Create a client with `createHedgeClient` and a signer with `keypairSigner`.
+
+```ts
+import { createHedgeClient, keypairFromFile, keypairSigner } from "@hedginxyz/sdk";
+
+const apiKey = process.env.HEDGE_API_KEY;
+if (!apiKey) throw new Error("Set HEDGE_API_KEY");
+
+const hedge = createHedgeClient({ apiKey });
+const signer = keypairSigner(keypairFromFile("/secure/path/manager.json"));
+```
+
+The signer's public key must be the manager wallet the API key is bound to. A hardware wallet or a KMS can replace `keypairSigner`. See [Custom signers](/sdk/examples#use-a-custom-signer).
+
+## Base URL and program ID
+
+By default the client talks to `https://hedgin.xyz`, which runs on Solana mainnet. It only signs transactions that call the Hedge Vault program `r2ahBQ6gbPCJ9FxBymYcXuwXi8NmenRry7SE7QR7FAt` at the top level, plus a few allowed system programs.
+
+Point the client at another deployment with `baseUrl`, and override `programId` only when that deployment runs its own copy of the program.
+
+```ts
+const hedge = createHedgeClient({
+  apiKey,
+  baseUrl: "https://your-deployment.example.com",
+  programId: "<your program id>",
+});
+```
+
+<Warning>
+  The default deployment is production on Solana mainnet. Every action you run with `execute` spends real fees and moves real vault funds. Test new code against a non-production deployment when you have one.
+</Warning>
+
+## Read a vault
+
+Every read returns parsed, typed data. `listVaults` lists the vaults the key manages.
+
+```ts
+import { formatUnits } from "@hedginxyz/sdk";
+
+const [vault] = await hedge.listVaults();
+if (!vault) throw new Error("This key manages no vaults");
+
+console.log(vault.name, formatUnits(vault.totalAssets, vault.depositDecimals), vault.depositSymbol);
+```
+
+## Run an action
+
+`execute` builds the transaction on the server, inspects it, signs it locally, sends it, and waits until it lands or fails.
+
+```ts
+import { parseUnits } from "@hedginxyz/sdk";
+
+const holdings = await hedge.getHoldings(vault.address);
+
+const outcome = await hedge.execute(
+  {
+    action: "jupiter/swap",
+    vault: vault.address,
+    sourceMint: holdings.depositToken.mint,
+    destinationMint: "So11111111111111111111111111111111111111112",
+    amount: parseUnits("1", holdings.depositToken.decimals),
+    slippageBps: 50,
+  },
+  signer,
+  { onProgress: (progress) => console.log(progress) },
+);
+```
+
+## Read the outcome
+
+`execute` never throws for an API error or a refused transaction. It returns an `Outcome`. Check `outcome.kind` before you do anything else.
+
+| Kind | Meaning | What to do |
+| --- | --- | --- |
+| `confirmed` | Every transaction landed. `created` holds a new `vault` or `position` address when the action made one. | Done. |
+| `refused` | The API built a transaction the SDK will not sign. Nothing was sent. | Report `reason`. Do not bypass the policy. |
+| `failed` | The API rejected the request, or a transaction failed on chain. | Earlier transactions in a batch may have landed. Read vault state before you retry. |
+| `unresolved` | A transaction was sent, but its result is unknown after 120 seconds. | Look up `pending` on an explorer. Do not resend. |
+
+```ts
+if (outcome.kind === "confirmed") console.log("Landed", outcome.signatures);
+else if (outcome.kind === "unresolved") console.warn("Check before retrying", outcome.pending);
+else console.error(outcome.kind, outcome.kind === "refused" ? outcome.reason : outcome.message);
+```
+
+[Execute and safety](/sdk/safety) explains how `execute` reaches each outcome and why it never rebuilds after an unknown send.
+
+## Amounts are strings
+
+Token amounts are base-unit integer strings, such as `"1000000"` for 1 USDC. The SDK never puts an amount in a JavaScript `number`. Convert display values with `parseUnits` and `formatUnits`.
+
+```ts
+parseUnits("1.5", 6); // "1500000"
+formatUnits("1500000", 6); // "1.5"
+```
+
+## Testing the SDK
+
+Clone the repository to run the SDK's own tests. They use recorded fixtures and never touch the network.
+
+```sh
+git clone https://github.com/HedginVault/sdk.git
+cd sdk
+yarn install
+yarn typecheck
+yarn test
+yarn build
+```
+
+To check a live API against the SDK's schemas with your own key, run the [API checker](/sdk/api-checker).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Examples" icon="code" href="/sdk/examples">
+    Recipes for swaps, DLMM positions, limit orders, Phoenix perps, and vault admin.
+  </Card>
+  <Card title="Reference" icon="book" href="/sdk/reference">
+    Every method, action, helper, type, and error the SDK exports.
+  </Card>
+</CardGroup>

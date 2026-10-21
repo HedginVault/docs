@@ -1,0 +1,529 @@
+---
+title: "Reference"
+description: "Every method, action, helper, type, constant, and error that @hedginxyz/sdk exports."
+---
+
+This page lists the public API of `@hedginxyz/sdk`, based on the SDK's source. For worked recipes, see [Examples](/sdk/examples). For request and response fields of each API route, see the [API reference](/api-reference/introduction).
+
+## Dependencies
+
+| Package | Kind | Why |
+| --- | --- | --- |
+| `@solana/web3.js` `^1.98.4` | Peer | `Keypair`, `PublicKey`, and `VersionedTransaction` shared with your code. |
+| `zod` | Runtime | Parses every API response against the SDK's schemas. |
+| `bs58` | Runtime | Encodes transaction signatures. |
+
+Node 18 or later. The package is CommonJS.
+
+## Program IDs
+
+| Constant | Value | Use |
+| --- | --- | --- |
+| `HEDGE_VAULT_PROGRAM_ID` | `r2ahBQ6gbPCJ9FxBymYcXuwXi8NmenRry7SE7QR7FAt` | The program the signing policy allows by default. |
+| `PHOENIX_PROGRAM_ID` | `EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih` | The only program the Phoenix onboarding policy allows. |
+
+## Constants
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS` | `100_000n` | The highest priority fee the SDK signs by default, in microLamports per compute unit. |
+| `DLMM_BINS_PER_TRANSACTION` | `70` | Bins one position account holds. A wider open becomes several transactions. |
+| `DLMM_MAX_POSITION_BINS` | `1_400` | The widest position range the SDK and app accept. |
+
+## Core types
+
+```ts
+/** Base-unit integer string, such as "1000000" for 1 USDC. Never a JavaScript number. */
+type BaseUnitString = string;
+
+/** Non-negative decimal with up to 12 fractional digits, such as "0.5" or "150.25". Not base units. */
+type DecimalString = string;
+
+type DlmmShape = "spot" | "curve" | "bidAsk";
+type VaultStatus = "normal" | "paused" | "reduceOnly";
+
+/** An optional sub-range of a position. Both ends inclusive, given together or not at all. */
+type InclusiveBinSelection = { lowerBinId: number; upperBinId: number } | { lowerBinId?: never; upperBinId?: never };
+
+interface PhoenixOrderId {
+  priceInTicks: string; // u64 integer string
+  orderSequenceNumber: string; // u64 integer string
+}
+```
+
+### `Outcome`
+
+What `execute` and `onboardPhoenix` return. Every kind carries `signatures`, the signatures of every transaction sent so far.
+
+```ts
+type Outcome =
+  | { kind: "confirmed"; signatures: string[]; created?: Created }
+  | { kind: "refused"; signatures: string[]; reason: string }
+  | { kind: "failed"; signatures: string[]; signature?: string; code: string; message: string }
+  | { kind: "unresolved"; signatures: string[]; pending: string[] };
+
+interface Created {
+  vault?: string; // from vault/initialize
+  position?: string; // from dlmm/initialize or dlmm/open
+}
+```
+
+### `Progress` and `ExecuteOptions`
+
+```ts
+type Progress =
+  | { kind: "building"; action: string }
+  | { kind: "sent"; signature: string; status: "pending" | "unknown" }
+  | { kind: "confirmed"; signature: string };
+
+interface ExecuteOptions {
+  onProgress?: (progress: Progress) => void | Promise<void>;
+  sleep?: (ms: number) => Promise<void>; // test hook
+  now?: () => number; // test hook
+}
+```
+
+`sleep` and `now` exist for tests with a fixed clock. Leave them unset in production.
+
+### `TransactionSigner`
+
+```ts
+interface TransactionSigner {
+  publicKey: PublicKey;
+  signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
+}
+```
+
+Anything that can sign as the manager wallet: a local keypair, a hardware wallet, or a KMS. It must add its signature and keep the signatures the builder already added.
+
+## Creating a client
+
+### `createHedgeClient`
+
+```ts
+function createHedgeClient(options: HedgeClientOptions): HedgeClient
+```
+
+Returns a `HedgeClient` bound to one API key. The client sends the key as a bearer token on every request. Reads time out after 10 seconds. Builders time out after 30 seconds, because they simulate on chain and can call Jupiter.
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `apiKey` | `string` | Required | The `hv1_<id>_<secret>` manager key. |
+| `baseUrl` | `string` | `https://hedgin.xyz` | The site origin. A URL ending in `/api/external/v1` also works. |
+| `programId` | `string` | `HEDGE_VAULT_PROGRAM_ID` | The Hedge Vault program the signing policy allows. Override only for a non-production deployment. |
+| `maxComputeUnitPriceMicroLamports` | `bigint` | `100_000n` | The highest priority fee the SDK signs. |
+| `fetch` | `typeof fetch` | Global `fetch` | A replacement `fetch`, for tests or a proxy. |
+
+```ts
+const hedge = createHedgeClient({
+  apiKey: process.env.HEDGE_API_KEY ?? "",
+  maxComputeUnitPriceMicroLamports: 50_000n,
+});
+```
+
+## Vault reads
+
+Every read needs the `read` scope. Each method parses the response against the SDK's schemas and returns its `data`. A response that does not match throws `ApiError` with the code `contract_mismatch`. The SDK never returns a half-parsed object.
+
+`vault` is a vault address string in every signature.
+
+### `listVaults`
+
+```ts
+listVaults(): Promise<VaultSummary[]>
+```
+
+The vaults this key manages, from `GET /vaults`. Each `VaultSummary` has `address`, `name`, `status`, `depositMint`, `depositSymbol`, `depositDecimals`, and `totalAssets`, so you can format amounts without another request.
+
+### `getVault`
+
+```ts
+getVault(vault: string): Promise<VaultDetail>
+```
+
+The on-chain vault state, from `GET /vaults/{vault}`: fees, limits, pending requests, pause flags, and the NAV epoch. `navPerShare` is scaled by 1e9. `protocol.maxSlippageBps` is the protocol-wide slippage cap.
+
+### `getHoldings`
+
+```ts
+getHoldings(vault: string): Promise<Holdings>
+```
+
+Token balances and their value, from `GET /vaults/{vault}/holdings`. `depositToken` describes the deposit mint. When some token has no price, `partial` is `true` and `unpriced` lists the mints.
+
+### `getStrategies`
+
+```ts
+getStrategies(vault: string): Promise<Strategy[]>
+```
+
+Open strategies, from `GET /vaults/{vault}/strategies`. `Strategy` is a union keyed by `type`:
+
+| `type` | Key fields |
+| --- | --- |
+| `jupiter` | `targetMint`, `symbol`, `decimals`, `vaultBalance` |
+| `dlmm` | `position`, `lbPair`, `tokenX`, `tokenY`, `amountX`, `amountY`, `pendingFeeX`, `pendingFeeY`, `lowerBinId`, `upperBinId`, `activeBinId`, `bins` |
+| `dlmm_limit_order` | `limitOrder`, `lbPair`, `side`, `lowerBinId`, `upperBinId`, `activeBinId`, `bins`, deposit, unfilled, proceeds, and fee totals |
+| `phoenix` | `equity`, `leverage` |
+| `unreadable` | `protocol`, `reason` |
+
+On a `dlmm` strategy, `lowerBinId` and `upperBinId` are inclusive. They and `bins` are optional because older servers omit them. The SDK lists a strategy type it does not know as `unreadable`.
+
+### `getNavHistory`
+
+```ts
+getNavHistory(vault: string, limit?: number): Promise<NavHistoryPoint[]>
+```
+
+Posted NAVs, oldest first, from `GET /vaults/{vault}/nav`. The API returns the latest 200 by default. A point with `overridden: true` was set by an admin, not by the keeper. Throws `ApiError` with the code `HistoryUnavailable` when the deployment has no history database.
+
+### `getRequests`
+
+```ts
+getRequests(vault: string): Promise<RequestQueue>
+```
+
+Queued `deposits` and `withdrawals`, from `GET /vaults/{vault}/requests`. A request is `pending` until a later NAV epoch is posted, then `resolvable`. Deposit `amount` is in deposit-mint base units. Withdrawal `shares` is in share base units.
+
+### `getStrategyHistory`
+
+```ts
+getStrategyHistory(vault: string): Promise<StrategyHistoryItem[]>
+```
+
+Closed strategies with their per-mint cash flows, newest first, from `GET /vaults/{vault}/strategy-history`. `realizedPnl` is a signed base-unit string equal to `returned + feesRetained - contributed`. A strategy with `exact: false` predates exact accounting. Throws `HistoryUnavailable` like `getNavHistory`.
+
+### `getPhoenix`
+
+```ts
+getPhoenix(vault: string): Promise<PhoenixManager>
+```
+
+Phoenix setup and trading state, from `GET /vaults/{vault}/phoenix`. `status` is `none` (no strategy), `registered` (strategy exists, trader not onboarded), or `ready`. `usdcVault` is `false` when the deposit mint is not USDC. `openOrders`, `withdrawable`, and `account` are `null` when Phoenix's API is down, and `account` is also `null` before onboarding.
+
+## Market reads
+
+These reads take `vault` too, because the API scopes every request to a vault the key manages.
+
+### `getQuote`
+
+```ts
+getQuote(request: QuoteRequest): Promise<Quote>
+
+interface QuoteRequest {
+  vault: string;
+  inputMint: string;
+  outputMint: string;
+  amount: string; // base units of inputMint
+  slippageBps: number;
+}
+```
+
+A Jupiter quote, from `GET /jupiter/quote`. Returns `inAmount`, `outAmount`, `priceImpactPct`, `routeLabels`, and `slippageBps`. One side of the swap must be the vault's deposit mint.
+
+### `getToken`
+
+```ts
+getToken(vault: string, mint: string): Promise<TokenDetail>
+```
+
+Any mint's `symbol`, `decimals`, `name`, `priceUsd`, and Jupiter `verified` flag, from `GET /tokens/{mint}`. `verified` is `null` when unknown. Warn before a swap that involves an unverified token.
+
+### `searchPools`
+
+```ts
+searchPools(vault: string, query: string, page?: number): Promise<PoolSearchPage>
+```
+
+Meteora DLMM pools that match `query`, such as a symbol, from `GET /dlmm/pools`. `page` defaults to 1. Returns `total`, `page`, `pages`, and `pools`, each with `address`, `name`, `tokenX`, `tokenY`, `binStep`, and display-only `tvl`, `volume24h`, `fees24h`, and `baseFeePct`.
+
+### `getPool`
+
+```ts
+getPool(vault: string, lbPair: string): Promise<PoolInfo>
+```
+
+One pool, from `GET /dlmm/pools/{lbPair}`: `tokenX`, `tokenY`, `binStep`, `activeBinId`, and `activePrice` (token Y per token X, as a string). Use it to choose a DLMM range.
+
+## Execution
+
+### `execute`
+
+```ts
+execute(request: ActionRequest, signer: TransactionSigner, options?: ExecuteOptions): Promise<Outcome>
+```
+
+Runs one [action](#actions) to a terminal `Outcome`. It builds on the server, inspects every transaction against the [signing policy](/sdk/safety#signing-policy), signs locally, sends, and polls until every transaction confirms, one fails, or 120 seconds pass. It follows batches and `next` continuations, and stops with `TooManySteps` after 12 builds. It never rebuilds after an ambiguous send.
+
+It throws only for a network error while building, before anything is signed, and for an error from your signer. See [What `execute` throws](/sdk/safety#what-execute-throws).
+
+### `onboardPhoenix`
+
+```ts
+onboardPhoenix(vault: string, signer: TransactionSigner, options?: ExecuteOptions): Promise<Outcome>
+```
+
+Registers the vault's Phoenix trader after `phoenix/initialize`. Phoenix co-signs on submit, so this path checks the transaction against a separate, narrower [onboarding policy](/sdk/safety#phoenix-onboarding-policy), signs it as fee payer, and submits it to Phoenix. It never resubmits. Needs the `send` and `phoenix/onboard` scopes.
+
+### `build`, `send`, and `status`
+
+```ts
+build(action: string, body: Record<string, unknown>): Promise<BuiltStep[]>
+send(signedTransactionBase64: string, ticket: string): Promise<SendResult>
+status(receipt: string): Promise<TransactionStatus>
+```
+
+The low-level calls `execute` is made of. `build` does not inspect or sign. Prefer `execute`. If you call `build` yourself, run [`inspectTransaction`](#inspecttransaction) on every step before you sign.
+
+| Type | Shape |
+| --- | --- |
+| `BuiltStep` | `transaction` (unsigned base64 v0), `simulation`, `ticket` (valid 90 seconds), `blockhash`, optional `sendConcurrently`, optional `next: { path, body }`. |
+| `SendResult` | `signature`, `receipt`, and `status` of `"pending"` or `"unknown"`. |
+| `TransactionStatus` | `{ status: "pending" }`, `"confirmed"`, `"expired"`, or `{ status: "failed", code, message }`. |
+
+## Actions
+
+`ActionRequest` is a union keyed by `action`. The other fields are that builder's body, and TypeScript checks them per action. `payer` is never part of a body, because the API sets it from the key.
+
+### Jupiter
+
+| Action | Fields | Notes |
+| --- | --- | --- |
+| `jupiter/initialize` | `vault, targetMint` | Opens the strategy the vault needs before it can hold `targetMint`. |
+| `jupiter/swap` | `vault, sourceMint, destinationMint, amount, slippageBps` | `amount` is in source-mint base units. |
+| `jupiter/sweep` | `vault, mint, slippageBps` | One transaction. Sells the vault's whole `mint` balance to the deposit mint, then closes that mint's strategy. HTTP 409 while an open DLMM position or limit order uses `mint`. |
+
+### Meteora DLMM
+
+| Action | Fields | Notes |
+| --- | --- | --- |
+| `dlmm/initialize` | `vault, lbPair`, and either `width` or `lowerBinId` + `upperBinId` | Creates an empty position and any missing pair-token Jupiter strategies. `width` is 1 to 70 bins centred on the active bin. `upperBinId` is exclusive, at most 70 above `lowerBinId`. Returns `created.position`. |
+| `dlmm/open` | `vault, lbPair, lowerBinId, upperBinId, amountX, amountY, shape, maxActiveBinSlippage` | `upperBinId` is exclusive. A range wider than 70 bins continues through `dlmm/extend`. |
+| `dlmm/add` | `vault, position, amountX, amountY, shape, maxActiveBinSlippage`, optional `lowerBinId` + `upperBinId` | The optional range is inclusive and inside the position. With it, adds only to those bins. |
+| `dlmm/remove` | `vault, position, bpsToRemove`, optional `cursorBinId`, optional `lowerBinId` + `upperBinId` | Removes `bpsToRemove` (1 to 10000) of liquidity, only from the range when given. |
+| `dlmm/flip` | `vault, position, lowerBinId, upperBinId, activeBinId, maxActiveBinSlippage` | One atomic transaction. Removes all liquidity from the inclusive range and re-adds that token as Bid-Ask. The range must lie strictly above (token X) or below (token Y) `activeBinId`. Does not claim fees. |
+| `dlmm/claim-fee` | `vault, position`, optional `cursorBinId` | Claims the position's fees. |
+| `dlmm/zap-out` | `vault, position, slippageBps`, optional `cursorBinId` | Removes everything. When eligible, continues to `jupiter/sweep` for the leftover non-deposit token. |
+| `dlmm/close` | `vault, position` | Removes everything, claims fees, and closes the position and its strategy. |
+| `dlmm/limit-order/place` | `vault, lbPair, side, bins` | `side` is `"ask"` (sells X above the active bin) or `"bid"` (sells Y below it). `bins` is 1 to 50 `{ binId, amount }` in strictly increasing `binId`, each amount above zero in the sold token. Opens missing pair-token Jupiter strategies first, so the build may hold two transactions. |
+| `dlmm/limit-order/cancel` | `vault, limitOrder`, optional `bins` | Cancels the listed bin ids, or every bin still holding anything. Pays unfilled amounts, proceeds, and fees back to the vault. Closes the strategy once the order is empty. |
+| `strategy/close` | `vault, strategy` | Closes an empty strategy. |
+
+`shape` is `"spot"`, `"curve"`, or `"bidAsk"`. `maxActiveBinSlippage` is how many bins the active price may move between build and landing before the transaction fails. `amountX` and `amountY` are base units of the pool's token X and token Y.
+
+### Phoenix perpetuals
+
+| Action | Fields | Notes |
+| --- | --- | --- |
+| `phoenix/initialize` | `vault` | Records the vault's Phoenix strategy. Then call `onboardPhoenix`. The deposit mint must be USDC. |
+| `phoenix/deposit` | `vault, amount` | Moves idle USDC into Phoenix collateral. USDC base units. |
+| `phoenix/withdraw` | `vault, amount` | Withdraws collateral to the vault. USDC base units. A queued withdrawal needs `phoenix/sweep` later. |
+| `phoenix/order` | `vault, symbol, side, size, reduceOnly, order`, optional `tpSl`, optional `disarmTpSl` | See below. |
+| `phoenix/tpsl` | `vault, symbol, takeProfit, stopLoss` | Replaces the market's take-profit and stop-loss. Each is a USD `DecimalString` or `null`. A `null` removes that leg, and both `null` removes the bracket. |
+| `phoenix/cancel` | `vault, symbol, orders` | `orders` is `"all"` or 1 to 20 `PhoenixOrderId` entries from `getPhoenix(vault).openOrders`. |
+| `phoenix/sweep` | `vault` | Unwraps tokens a queued withdrawal delivered into USDC. |
+
+`phoenix/order` fields:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `symbol` | `string` | A Phoenix market, such as `"SOL"`. |
+| `side` | `"long" \| "short"` | Order direction. |
+| `size` | `DecimalString` | Base-asset amount, such as `"0.5"`. Not base units. |
+| `reduceOnly` | `boolean` | Only reduces an existing position. |
+| `order` | `{ type: "market", slippageBps } \| { type: "limit", price, postOnly }` | `slippageBps` is 1 to 2000 around the mark. `price` is USD per base unit. |
+| `tpSl` | `{ takeProfit, stopLoss }` | Optional. Arms a TP/SL on the whole resulting position, replacing the market's armed one. At least one price set. Accepted only on a market order that is not reduce-only and does not flip the position. |
+| `disarmTpSl` | `boolean` | Optional. On a full close, also cancels the market's armed TP/SL, which would otherwise stay for the next position. |
+
+### Vault administration
+
+| Action | Fields | Notes |
+| --- | --- | --- |
+| `vault/initialize` | `name, depositMint, performanceFeeBps, managementFeeBps, depositCap, minDeposit, minWithdrawalShares` | Takes no `vault`. Needs a key not limited to specific vaults. Returns `created.vault`. |
+| `vault/update` | `vault` and at least one of `performanceFeeBps, managementFeeBps, depositCap, minDeposit, minWithdrawalShares, status, depositPaused, withdrawalPaused` | Changes only the fields you give. |
+| `vault/claim-fee` | `vault` | Mints the manager's accrued fee shares to the manager. |
+| `vault/close` | `vault` | Closes the vault. |
+
+`name` is at most 32 UTF-8 bytes. Fees are basis points from 0 to 10000. `depositCap` and `minDeposit` are deposit-mint base units. `minWithdrawalShares` is share base units. `status` is a `VaultStatus`.
+
+### Continuations
+
+Some builds return a step with `next`. `execute` follows it after the current batch confirms. You never request these yourself, but your key needs their scopes.
+
+| Continuation | Follows |
+| --- | --- |
+| `dlmm/extend` | `dlmm/open` on a range wider than 70 bins |
+| `dlmm/add-range` | The last `dlmm/extend`, to add liquidity across the widened range |
+| `dlmm/zap-out/swap` | `dlmm/zap-out` |
+| `jupiter/sweep` | `dlmm/zap-out`, for the leftover non-deposit token |
+
+## Key scopes
+
+Each API key lists the actions it may run. The API rejects a request when the key lacks a needed scope. The SDK cannot check scopes before it builds, so a missing scope shows up as a `failed` outcome with the API's error code.
+
+| To do this | The key needs |
+| --- | --- |
+| Any read | `read` |
+| Run an action with `execute` | `send` and the action's name, such as `phoenix/order` or `dlmm/flip` |
+| Follow a continuation | The continuation's name too, such as `dlmm/extend` |
+| `onboardPhoenix` | `send` and `phoenix/onboard` |
+| `vault/initialize` | `send` and `vault/initialize`, on a key not limited to specific vaults |
+
+So `dlmm/zap-out` needs `dlmm/zap-out`, `dlmm/zap-out/swap`, and `jupiter/sweep`, and a wide `dlmm/open` also needs `dlmm/extend`.
+
+## Signing
+
+### `keypairSigner`
+
+```ts
+function keypairSigner(keypair: Keypair): TransactionSigner
+```
+
+Wraps a `Keypair` as a `TransactionSigner`.
+
+### `keypairFromFile`
+
+```ts
+function keypairFromFile(path: string): Keypair
+```
+
+Reads a Solana CLI keypair file, a JSON array of 64 bytes. Its errors never include the file contents.
+
+### `inspectTransaction`
+
+```ts
+function inspectTransaction(base64: string, policy: SigningPolicy): VersionedTransaction
+
+interface SigningPolicy {
+  manager: PublicKey;
+  programId: string;
+  maxComputeUnitPriceMicroLamports: bigint;
+}
+```
+
+Checks one unsigned base64 transaction against the [signing policy](/sdk/safety#signing-policy) and returns it decoded. Throws `UnsafeTransactionError` when it is not v0, is not paid by `manager`, lacks a required co-signature, calls a program outside the allowed set at the top level, or sets a priority fee above the cap.
+
+```ts
+const policy: SigningPolicy = {
+  manager: signer.publicKey,
+  programId: HEDGE_VAULT_PROGRAM_ID,
+  maxComputeUnitPriceMicroLamports: DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS,
+};
+for (const step of await hedge.build("jupiter/swap", body)) inspectTransaction(step.transaction, policy);
+```
+
+### `inspectPhoenixOnboardTransaction`
+
+```ts
+function inspectPhoenixOnboardTransaction(base64: string, policy: SigningPolicy): VersionedTransaction
+```
+
+The narrower check `onboardPhoenix` uses. The transaction must be v0, paid by `manager`, non-empty, and call only `PHOENIX_PROGRAM_ID` at the top level. ComputeBudget is refused, so no priority fee can be set.
+
+## DLMM helpers
+
+Pure functions. They never touch the network. A `pool` argument needs `activeBinId`, `activePrice`, and `binStep`, so a `PoolInfo` from `getPool` fits. Prices are token Y per token X.
+
+### `binRangeForPrices`
+
+```ts
+function binRangeForPrices(pool: PoolPricing, minPrice: number, maxPrice: number): PriceRange
+
+interface PriceRange {
+  lowerBinId: number;
+  upperBinId: number; // exclusive, as dlmm/open expects
+  binCount: number;
+  sides: "x" | "y" | "both";
+  lowPrice: number; // actual price of the first bin
+  highPrice: number; // actual price of the last bin
+}
+```
+
+The smallest bin range that covers a price range. `sides` says which tokens the range can take: X at and above the active bin, Y at and below it. Throws when a price is not positive, `minPrice` is not below `maxPrice`, or the range needs more than 1,400 bins.
+
+### `binPrice`
+
+```ts
+function binPrice(pool: PoolPricing, binId: number): number
+```
+
+The price of one bin.
+
+### `flipSide`
+
+```ts
+function flipSide(tokenXMint: string, depositMint: string): "x" | "y"
+```
+
+The non-deposit token a `dlmm/flip` sells: X, unless X is the deposit mint.
+
+### `flipRange`
+
+```ts
+function flipRange(selection: InclusiveBinRange, activeBinId: number, side: FlipSide): InclusiveBinRange | null
+```
+
+The part of an inclusive selection that holds only one side's token: bins strictly above the active bin for X, strictly below it for Y. Returns `null` when no bin qualifies.
+
+## Unit helpers
+
+### `parseUnits`
+
+```ts
+function parseUnits(display: string, decimals: number): string
+```
+
+Converts a display amount such as `"1.5"` or `"1,000"` to a base-unit string. Throws when the text is not a number or has more fractional digits than the token, instead of rounding.
+
+### `formatUnits`
+
+```ts
+function formatUnits(baseUnits: string, decimals: number): string
+```
+
+Converts a base-unit string to a display amount with trailing zeros removed. Neither helper goes through `number`.
+
+```ts
+parseUnits("1.5", 6); // "1500000"
+formatUnits("1500000", 6); // "1.5"
+```
+
+## Errors
+
+| Class | Fields | Thrown when |
+| --- | --- | --- |
+| `ApiError` | `status`, `code`, `message` | The API answers with a non-2xx status, or a 2xx body does not match the SDK's schemas. |
+| `UnsafeTransactionError` | `message` | `inspectTransaction` or `inspectPhoenixOnboardTransaction` rejects a transaction. |
+
+Reads throw `ApiError`. Inside `execute`, an `ApiError` becomes a `failed` outcome and an `UnsafeTransactionError` becomes a `refused` outcome.
+
+The SDK adds two codes of its own:
+
+| Code | Meaning |
+| --- | --- |
+| `contract_mismatch` | The response succeeded, but its shape differs from the SDK's schemas. Run the [API checker](/sdk/api-checker). |
+| `unexpected_response` | The status was an error and the body was not the documented `{ error: { code, message } }` shape. |
+
+Other codes come from the API. See [Errors and limits](/api-reference/errors-and-limits).
+
+```ts
+try {
+  await hedge.getStrategyHistory(vault);
+} catch (error) {
+  if (error instanceof ApiError && error.code === "HistoryUnavailable") console.log("No history database");
+  else throw error;
+}
+```
+
+## Other exports
+
+These exist for tests and custom transports. Most integrations do not need them.
+
+| Export | Purpose |
+| --- | --- |
+| `executeBuild(request, transport, signer, policy, options?)` | The engine behind `execute`, over any `ExecutionTransport`. |
+| `executePhoenixOnboard(vault, transport, signer, policy, options?)` | The engine behind `onboardPhoenix`. |
+| `groupSteps(steps)` | Splits built steps into send groups. Consecutive `sendConcurrently` steps share a group. |
+| `toBuildRequest(request)` | Splits an `ActionRequest` into `{ action, body }`. |
+| `normalizeBaseUrl(baseUrl)` | Strips trailing slashes and `/api/external/v1` from a URL. |
+| `*Schema` | The zod schemas the client parses with, such as `HoldingsSchema` and `StrategySchema`, with their inferred types. |

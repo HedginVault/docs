@@ -1,0 +1,17 @@
+---
+title: "Changelog"
+description: "Release notes for @hedginxyz/sdk."
+---
+
+<Update label="0.2.1" description="October 18, 2026">
+  - Adds the `phoenix/tpsl` action, which replaces or removes a market's take-profit and stop-loss.
+  - `getVault` accepts a response that omits `unmanagedHoldings`. A missing list means unknown, not empty.
+</Update>
+
+<Update label="0.2.0" description="October 14, 2026">
+  - First tagged release, published to npm as `@hedginxyz/sdk`.
+  - Parses DLMM limit orders as the `dlmm_limit_order` strategy type, with the `dlmm/limit-order/place` and `dlmm/limit-order/cancel` actions.
+  - Adds `tpSl` and `disarmTpSl` to `phoenix/order`.
+  - Lists a strategy type the SDK does not know as `unreadable` instead of failing the whole read.
+  - Includes `jupiter/sweep`, bin ranges on `dlmm/add` and `dlmm/remove`, `dlmm/flip`, Phoenix and vault admin actions, token lookup, and the unit and price-to-bin helpers.
+</Update>

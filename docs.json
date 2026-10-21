@@ -161,11 +161,23 @@
         "tab": "SDK",
         "groups": [
           {
-            "group": "TypeScript SDK",
+            "group": "Overview",
             "pages": [
               "sdk/overview",
-              "sdk/reads",
-              "sdk/actions",
+              "sdk/changelog"
+            ]
+          },
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "sdk/getting-started",
+              "sdk/examples",
+              "sdk/reference"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
               "sdk/safety",
               "sdk/api-checker"
             ]
@@ -183,5 +195,15 @@
     "socials": {
       "github": "https://github.com/HedginVault"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/sdk/reads",
+      "destination": "/sdk/reference#vault-reads"
+    },
+    {
+      "source": "/sdk/actions",
+      "destination": "/sdk/reference#actions"
+    }
+  ]
 }
