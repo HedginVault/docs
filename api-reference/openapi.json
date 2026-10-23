@@ -6262,6 +6262,20 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "priceUsd": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "USD per whole token, from Meteora; null when it has none."
+                    },
+                    "marketCap": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "USD market cap, from Meteora; null when it has none."
                     }
                   }
                 },
@@ -6285,6 +6299,20 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "priceUsd": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "USD per whole token, from Meteora; null when it has none."
+                    },
+                    "marketCap": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "USD market cap, from Meteora; null when it has none."
                     }
                   }
                 },
@@ -6294,6 +6322,13 @@
                 "baseFeePct": {
                   "type": "number",
                   "description": "Percent: 0.04 means 0.04%."
+                },
+                "dynamicFeePct": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Percent: the volatility fee charged on top of baseFeePct right now. Null when Meteora does not report it."
                 },
                 "tvl": {
                   "type": "number"
