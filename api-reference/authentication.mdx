@@ -9,18 +9,20 @@ Every request needs an API key in the `Authorization` header:
 Authorization: Bearer hv1_<id>_<secret>
 ```
 
-A Hedgin administrator creates the key and shows it to you once. Store it in your bot's secret store. Keep it out of Git, logs, URLs, and browser code. Use the key exactly as issued. A missing, malformed, unknown, revoked, or expired key returns 401 with code `Unauthorized`.
+Create the key yourself in the [manager console](https://hedgin.xyz/manage): open your vault, select **Connect AI**, pick what the key may do, and sign with the vault's manager wallet or a delegate wallet. The key is made in your browser and shown once; Hedgin stores only a fingerprint of it. A wallet you cannot connect to a browser, such as the [Telegram bot](/managers/telegram-bot)'s wallet, needs a key from a Hedgin administrator instead.
+
+Store the key in your bot's secret store. Keep it out of Git, logs, URLs, and browser code. Use the key exactly as issued. A missing, malformed, unknown, revoked, or expired key returns 401 with code `Unauthorized`.
 
 ## What a key allows
 
-Each key carries four settings that the administrator chooses:
+Each key carries four settings:
 
 | Setting | Effect |
 | --- | --- |
 | Manager | The Solana public key the bot signs as. The API uses it as the fee payer of every build. |
-| Vault allowlist | Optional. When set, the key can reach only those vaults. When absent, the key reaches every vault whose current authority is the manager. |
-| Actions | The scopes below. |
-| Expiry | Optional. After it, the key returns 401. |
+| Vault allowlist | A key you create reaches only the vault you created it on. An administrator can issue a key with several vaults or none. With none, the key reaches every vault whose current authority is the manager. |
+| Actions | The scopes below. A delegate wallet can pick only actions its delegate permissions cover. |
+| Expiry | A key you create expires 90 days after creation. After it, the key returns 401. |
 
 The scopes are:
 
@@ -39,7 +41,7 @@ On every request that names a vault, the API reads the vault from the chain and 
 
 If either check fails, the request returns 403. The check reads the chain on every request, so it reflects authority changes at once.
 
-`vault/initialize` has no vault yet, so it skips these checks. It needs a key without a vault allowlist, because a new vault cannot be on a list. A key with an allowlist gets 403.
+`vault/initialize` has no vault yet, so it skips these checks. It needs a key without a vault allowlist, because a new vault cannot be on a list. A key with an allowlist gets 403. Only an administrator can issue such a key.
 
 Sending a transaction needs `send` and also the builder action that produced its ticket. If the administrator removes `dlmm/open` from a key, tickets that key already built for `dlmm/open` stop working.
 
@@ -58,13 +60,17 @@ Phoenix onboarding needs `phoenix/onboard` and `send`. See [Send and status](/ap
 
 ## Change, rotate, and revoke keys
 
-Changes an administrator makes to a key take effect within about 5 seconds. If Hedgin cannot look up a key, the API returns 503 instead of letting the request through.
+Revoking a key, or any change an administrator makes to it, takes effect within about 5 seconds. If Hedgin cannot look up a key, the API returns 503 instead of letting the request through.
+
+Your live keys for a vault are listed under **Connect AI** in the manager console, with when each expires and was last used. One wallet can hold up to 5 live keys per vault.
 
 To rotate a key:
 
-1. Ask a Hedgin administrator for a new key with the same settings.
+1. Create a new key with the same actions.
 2. Move the bot to the new key.
-3. Ask the administrator to revoke the old key.
+3. Select **Revoke** next to the old key and sign.
+
+Rotate before the 90 days run out. An expired key cannot be extended from the console.
 
 ## If a key leaks
 
@@ -72,4 +78,4 @@ To rotate a key:
 Revoking an API key does not protect a leaked manager signing key. The program has no instruction that changes a vault's authority, so whoever holds the manager key controls the vault permanently. A Hedgin guardian can pause the vault, but the authority can lift that pause with `vault/update`. Keep the manager key only on the machine that runs the bot. If it leaks, contact Hedgin at once.
 </Warning>
 
-A leaked API key alone cannot move funds, because every transaction also needs the manager's signature. It still exposes your vault data and lets the holder build transactions and spend your rate limit. Ask an administrator to revoke it.
+A leaked API key alone cannot move funds, because every transaction also needs the manager's signature. It still exposes your vault data and lets the holder build transactions and spend your rate limit. Revoke it in the manager console, or ask an administrator if the key was issued to a wallet you cannot connect.

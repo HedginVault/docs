@@ -12,7 +12,7 @@ Hedgin has several ways in. Each fits a different goal and needs different acces
 | Browse vaults, their value, and their positions | [Vaults page](https://hedgin.xyz/vaults) | Nothing. No wallet or key. |
 | Deposit or withdraw | [Vault page](https://hedgin.xyz/vaults) | A Solana wallet holding the vault's deposit token and a little SOL. |
 | Run a vault by hand | [Manager console](https://hedgin.xyz/manage) | A manager wallet that a Hedgin administrator has whitelisted. |
-| Automate a vault with a bot | [Manager bot API](/api-reference/introduction) | An API key that a Hedgin administrator issues, and the vault's authority key held by the bot. |
+| Automate a vault with a bot | [Manager bot API](/api-reference/introduction) | An API key you create in the manager console, and the vault's authority key held by the bot. |
 | Write a bot in TypeScript | [TypeScript SDK](/sdk/overview) | The same key and signer as the bot API. |
 | Build your own Solana client | [Published IDL](https://hedgin.xyz/idl/hedge_vault.json) | Your own Solana client and signer. The program checks every role and account. |
 
@@ -62,7 +62,7 @@ flowchart LR
   <Tab title="Build a bot">
     <Steps>
       <Step title="Get an API key">
-        Ask a Hedgin administrator for an API key. The key names your manager public key, the vaults it may act on, and the exact actions it may use.
+        In the [manager console](https://hedgin.xyz/manage), open your vault, select **Connect AI**, and create a key. It works for that vault only, carries the exact actions you pick, and expires after 90 days. See [Authentication](/api-reference/authentication).
       </Step>
       <Step title="Store your secrets">
         Keep the API key and the vault's authority key in your bot's secret store. Never put either one in a URL, a log, a browser, or a prompt.
