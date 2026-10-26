@@ -144,10 +144,10 @@ flowchart LR
 
 1. Open the position panel.
 2. Select **Zap out**.
-3. Under **Receive in**, choose either pool token, for example **USDC** or **SOL** in a SOL-USDC pool.
+3. Under **Receive in**, choose the deposit token or either pool token. For example, a USDC vault can pick **USDC** or **SOL** in a SOL-USDC pool, and **USDC**, **NVDAx**, or **SOL** in an NVDAx-SOL pool.
 4. Approve the transactions. Positions up to 1,400 bins need one wallet approval.
 
-- Zap out works only when the pool includes the deposit token.
+- In a pool without the deposit token, receiving the deposit token takes two stages. The zap ends in the pool's second token, then a follow-up swaps only what the zap returned into the deposit token.
 - When you receive the deposit token, a follow-up sale sells any of the other token the vault still holds. When you receive the other token, the vault keeps it and no sale follows.
 - In each transaction, the remove, the claim, and the swap happen together. If the swap fails, that whole transaction fails, so the vault never holds a half-finished step.
 - A restarted zap out builds transactions only for the bins that still hold tokens or fees.
