@@ -138,15 +138,17 @@ Flip does not claim fees. If the pool price moves before the transaction lands, 
 ```mermaid
 flowchart LR
     A["Remove all<br/>liquidity"] --> B["Claim fees"]
-    B --> C["Sell non-deposit token<br/>through Jupiter"]
+    B --> C["Swap into the chosen<br/>token through Jupiter"]
     C --> D["Close position"]
 ```
 
 1. Open the position panel.
-2. Select **Zap out** followed by the deposit token name, for example **Zap out to USDC**.
-3. Approve the transactions. Positions up to 1,400 bins need one wallet approval.
+2. Select **Zap out**.
+3. Under **Receive in**, choose either pool token, for example **USDC** or **SOL** in a SOL-USDC pool.
+4. Approve the transactions. Positions up to 1,400 bins need one wallet approval.
 
 - Zap out works only when the pool includes the deposit token.
+- When you receive the deposit token, a follow-up sale sells any of the other token the vault still holds. When you receive the other token, the vault keeps it and no sale follows.
 - In each transaction, the remove, the claim, and the swap happen together. If the swap fails, that whole transaction fails, so the vault never holds a half-finished step.
 - A restarted zap out builds transactions only for the bins that still hold tokens or fees.
 

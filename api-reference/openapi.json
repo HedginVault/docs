@@ -2300,8 +2300,8 @@
           "Meteora DLMM transactions"
         ],
         "operationId": "build_dlmm_zap_out",
-        "summary": "Exit position to deposit token",
-        "description": "Requires key scope `dlmm/zap-out`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one.\n\nRemoves all liquidity, claims fees, swaps the non-deposit token to the deposit mint, and closes the position's strategy. The vault's deposit mint must be one side of the pair. A wide position, a `cursorBinId`, or a long route returns a batch. The last step can carry `next` to `jupiter/sweep`, which sells the remaining non-deposit token and closes its strategy.",
+        "summary": "Exit position to either pool token",
+        "description": "Requires key scope `dlmm/zap-out`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one.\n\nRemoves all liquidity, claims fees, swaps the other pool token into `outputMint`, and closes the position's strategy. `outputMint` defaults to the deposit mint. Set it to the pool's other token, such as SOL in a SOL-USDC pool of a USDC vault, to keep the proceeds in that token. The vault then holds it in that token's Jupiter strategy. The vault's deposit mint must be one side of the pair. A wide position, a `cursorBinId`, or a long route returns a batch. When the zap ends in the deposit mint, the last step can carry `next` to `jupiter/sweep`, which sells the remaining non-deposit token and closes its strategy.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2328,6 +2328,10 @@
                   "cursorBinId": {
                     "type": "integer",
                     "description": "First bin to process. Use it to resume after partial progress."
+                  },
+                  "outputMint": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Pool token to end in. Defaults to the vault deposit mint. Must be one of the pool's two mints."
                   }
                 }
               },
