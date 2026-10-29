@@ -4896,6 +4896,10 @@
               "shareSupply": {
                 "$ref": "#/components/schemas/BaseUnitAmount"
               },
+              "shareSymbol": {
+                "type": ["string", "null"],
+                "description": "The share token's Metaplex metadata symbol, the ticker wallets show. Null until the vault's share metadata is created."
+              },
               "idleBalance": {
                 "$ref": "#/components/schemas/BaseUnitAmount"
               },
