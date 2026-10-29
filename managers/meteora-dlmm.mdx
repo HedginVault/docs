@@ -1,208 +1,69 @@
 ---
 title: "Provide liquidity with Meteora DLMM"
-description: "Open, manage, and exit Meteora DLMM liquidity positions and limit orders from a Hedgin vault."
+sidebarTitle: "Meteora DLMM"
+description: "Open a liquidity position, manage its range and fees, and exit to the vault."
 ---
 
-Meteora DLMM (Dynamic Liquidity Market Maker) is a type of trading pool on Solana. You add two tokens to a pool, traders swap against them, and you earn a share of the trading fees. A Hedgin vault can hold DLMM positions and limit orders. This page shows how to run them from the manager console.
+Meteora DLMM lets your vault provide liquidity within a price range and earn trading fees. A range consists of **bins**, each representing a price step. Liquidity earns trading fees while its bin is active.
 
-## How DLMM liquidity works
-
-A DLMM pool splits its price range into **bins**. Each bin covers one small price step and holds liquidity at that price. A **position** is your liquidity spread across a range of bins.
-
-```mermaid
-flowchart LR
-    Y["Bins below the price<br/>hold token Y"] --- A["Active bin<br/>current price,<br/>earns fees now"]
-    A --- X["Bins above the price<br/>hold token X"]
-```
-
-- The **active bin** holds the current pool price. Only liquidity in the active bin earns fees from trades at that moment.
-- Token X is the pool's first token. Token Y is the second. As the price moves through your range, trades convert one token into the other.
-- The **bin step** is the price gap between two neighboring bins. A small bin step suits stable pairs. A large one suits volatile pairs.
-
-### Pair rules for vaults
-
-A vault can open a position in any pool. The program requires one thing first: each pool token other than the deposit token needs a Jupiter strategy, so the keeper counts it in the vault's value. The console creates any missing Jupiter strategy when you open a position or place a limit order.
-
-| The keeper counts | The keeper does not count |
-| --- | --- |
-| The position's token amounts | Unclaimed Meteora farming rewards |
-| The position's unclaimed fees | |
+As the price moves, the position's token mix changes. An out-of-range position stops earning trading fees and may hold only one token.
 
 ## Open a position
 
-<Steps>
-  <Step title="Choose a pool">
-    Open the **Liquidity** tab and search for a pool. Compare the pair, bin step, current price, liquidity, and fees before you choose.
-  </Step>
-  <Step title="Set the price range">
-    Drag the range on the chart, or type the lower and upper prices. The panel shows **Total bins**, up to 1,400. The default range is 70 bins around the current price.
-  </Step>
-  <Step title="Pick a shape">
-    Under **Strategy**, pick how the liquidity spreads across the range. See [Liquidity shapes](#liquidity-shapes).
-  </Step>
-  <Step title="Enter the amounts">
-    Enter how much of each token to add. **Auto-fill on drag** keeps the two amounts in line with the range.
-  </Step>
-  <Step title="Open the position">
-    Select **Open position** and approve the transactions. The panel shows the **Position rent deposit**. Meteora refunds it when the position closes.
-  </Step>
-</Steps>
+1. In **Liquidity**, choose a pool. Review its token pair, price, liquidity, and fees.
+2. Set the lower and upper prices.
+3. Choose a liquidity shape.
+4. Enter the token amounts, review the account deposit, and select **Open position**.
 
-### Liquidity shapes
+| Shape | Distribution |
+| --- | --- |
+| Spot | Evenly across the range. |
+| Curve | More near the current price. |
+| Bid-Ask | More at the edges. |
 
-The charts show the idea, not exact amounts. The middle bar is the bin at the current price.
+The console may ask for an extra setup approval when the vault first uses a pool token.
 
-<Tabs>
-  <Tab title="Spot">
-    The same amount in every bin.
+The console supports ranges up to 1,400 bins. Wide positions can complete in several steps. If a step fails, reopen the position and check what completed before continuing.
 
-    ```mermaid
-    xychart-beta
-        x-axis ["-3", "-2", "-1", "Price", "+1", "+2", "+3"]
-        y-axis "Liquidity" 0 --> 10
-        bar [5, 5, 5, 5, 5, 5, 5]
-    ```
-  </Tab>
-  <Tab title="Curve">
-    More near the current price, less at the edges.
-
-    ```mermaid
-    xychart-beta
-        x-axis ["-3", "-2", "-1", "Price", "+1", "+2", "+3"]
-        y-axis "Liquidity" 0 --> 10
-        bar [1, 3, 6, 9, 6, 3, 1]
-    ```
-  </Tab>
-  <Tab title="Bid-Ask">
-    More at the edges, less near the current price.
-
-    ```mermaid
-    xychart-beta
-        x-axis ["-3", "-2", "-1", "Price", "+1", "+2", "+3"]
-        y-axis "Liquidity" 0 --> 10
-        bar [9, 6, 3, 1, 3, 6, 9]
-    ```
-  </Tab>
-</Tabs>
-
-### Wide ranges
-
-```mermaid
-flowchart TD
-    A["Range size?"] -- "Up to 70 bins" --> B["One transaction"]
-    A -- "More than 70 bins" --> C["Several transactions,<br/>one wallet request,<br/>sent in order"]
-    C --> D{"A step fails?"}
-    D -- "Yes" --> E["Confirmed steps stay.<br/>Reopen the panel<br/>to see the state."]
-```
-
-[How transactions work](/concepts/transactions) explains why confirmed steps stay.
+Positions and unclaimed trading fees count toward vault valuation. Unclaimed farming rewards do not.
 
 ## Manage a position
 
-Select the position in the **Liquidity** tab or the **Portfolio** tab. A position moves through these states:
+Open the position from **Liquidity** or **Portfolio**.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Open: Open position
-    Open --> Open: Add, Remove part, Claim fees, Flip
-    Open --> Empty: Remove all and claim fees
-    Empty --> Closed: Close position
-    Open --> Closed: Zap out
-    Closed --> [*]
-```
-
-The position panel has three modes:
-
-| Mode | What it does |
+| Action | Result |
 | --- | --- |
-| **Add** | Adds more of either token to the existing range. |
-| **Remove** | Pick a percentage, then select the remove button, for example **Remove 50%**. That share of the liquidity goes back to the vault. |
-| **Claim fees** | Moves the fees the position has earned into the vault. |
+| Add | Add tokens to the existing range. |
+| Remove | Return a chosen share of liquidity to the vault. |
+| Claim fees | Move earned trading fees into the vault. |
+| Flip to Bid-Ask | Redistribute selected bins holding only the non-deposit token into a Bid-Ask shape. This does not claim fees. |
 
-### Flip one side to Bid-Ask
-
-After the price moves, part of your range can hold only one token. **Flip** removes the selected bins that hold only the non-deposit token and adds the same amount back in a Bid-Ask shape, in one transaction.
-
-1. Select the bins to flip.
-2. Select **Flip** followed by the token name, for example **Flip SOL to Bid-Ask**.
-3. Approve the transaction.
-
-<Note>
-Flip does not claim fees. If the pool price moves before the transaction lands, it fails. Refresh and try again.
-</Note>
+If a flip fails because the pool price moved, refresh the position before trying again.
 
 ## Exit a position
 
-**Zap out** exits a position in one action:
+Select **Zap out** to remove liquidity, claim fees, and close the position. Under **Receive in**, choose the vault's deposit token or either pool token.
 
-```mermaid
-flowchart LR
-    A["Remove all<br/>liquidity"] --> B["Claim fees"]
-    B --> C["Swap into the chosen<br/>token through Jupiter"]
-    C --> D["Close position"]
-```
+If the pool does not contain the deposit token, receiving it requires an extra conversion. Review the complete exit before confirming. Choosing a non-deposit pool token keeps it in the vault.
 
-1. Open the position panel.
-2. Select **Zap out**.
-3. Under **Receive in**, choose the deposit token or either pool token. For example, a USDC vault can pick **USDC** or **SOL** in a SOL-USDC pool, and **USDC**, **NVDAx**, or **SOL** in an NVDAx-SOL pool.
-4. Approve the transactions. Positions up to 1,400 bins need one wallet approval.
+When you receive the deposit token, a follow-up sale can also sell the vault's existing balance of the other pool token. Review that sale before confirming.
 
-- In a pool without the deposit token, receiving the deposit token takes two stages. The zap ends in the pool's second token, then a follow-up swaps only what the zap returned into the deposit token.
-- When you receive the deposit token, a follow-up sale sells any of the other token the vault still holds. When you receive the other token, the vault keeps it and no sale follows.
-- In each transaction, the remove, the claim, and the swap happen together. If the swap fails, that whole transaction fails, so the vault never holds a half-finished step.
-- A restarted zap out builds transactions only for the bins that still hold tokens or fees.
+To exit manually, remove all liquidity, claim fees, then select **Close position**. Returned tokens stay in the vault. Swap them to the deposit token if you need withdrawal liquidity.
 
-To exit by hand instead, remove all liquidity, claim the fees, and select **Close position**.
+An exit can complete in several steps. If interrupted, inspect the remaining position before continuing. See [Pending or failed actions](/faq#pending-or-failed-actions).
 
-### What the status allows
+## Place or cancel a limit order
 
-| Action | Vault reduce-only | Vault paused | Protocol reduce-only or paused |
-| --- | --- | --- | --- |
-| Open a position, add liquidity | Blocked | Blocked | Blocked |
-| Remove liquidity, claim fees | Allowed | Blocked | Blocked |
+A DLMM limit order exchanges a token when the pool reaches your selected price. Prices are quoted in token Y per token X.
 
-## Place a limit order
+1. Choose **Sell X** above the current pool price or **Buy X** below it.
+2. Enter the limit price and amount.
+3. Select **Place order** and approve.
 
-A DLMM **limit order** rests one token in up to 50 bins, waiting for the price to reach it. When a swap crosses an order's bin, the order fills at that bin's price and earns a maker fee. The proceeds and fees stay inside the order until you cancel it.
+To collect proceeds, fees, and any unfilled tokens, select **Cancel order** in **Portfolio**. Cancelling the whole order also closes its strategy.
 
-| Side | Token | Limit price must be |
-| --- | --- | --- |
-| **Sell X** | Sells token X | Above the pool price |
-| **Buy X** | Buys token X | Below the pool price |
+## Trading restrictions
 
-The limit price is in token Y per token X.
+Opening positions, adding liquidity, and placing orders require Normal status. A vault in reduce-only can remove liquidity, claim fees, and cancel orders, but a protocol-wide reduce-only status blocks those actions. Paused status blocks DLMM trading and exits.
 
-<Steps>
-  <Step title="Choose the side">
-    Open the limit order card for a pool. Select **Sell X** or **Buy X**.
-  </Step>
-  <Step title="Set the price and amount">
-    Enter the **Limit price** and the amount.
-  </Step>
-  <Step title="Place the order">
-    Select **Place order** and approve the transaction. The order appears as a strategy.
-  </Step>
-</Steps>
-
-Each bin of the order shows one of these states:
-
-```mermaid
-stateDiagram-v2
-    state "Partly filled" as PartlyFilled
-    [*] --> Open: Place order
-    Open --> PartlyFilled: Swap crosses the bin
-    PartlyFilled --> Filled: Swap crosses the rest
-    Open --> Filled: Swap crosses the bin
-```
-
-To cancel, select **Cancel order** in the **Portfolio** tab. The vault receives the unfilled amount, the fill proceeds, and the maker fees. Cancelling the whole order also closes its strategy in the same transaction.
-
-## Use a bot
-
-The [manager bot API](/api-reference/introduction) covers every DLMM action in this guide: pool search, opening, adding, removing, flipping, claiming, zap out, closing, and limit orders.
-
-<Warning>
-Wide positions return several transactions with ordering markers, and some actions return a follow-up step. A bot must follow those markers exactly.
-</Warning>
-
-The API reference describes each action's fields.
+For automation, use the [SDK examples](/sdk/examples) or [Manager API](/api-reference/introduction).

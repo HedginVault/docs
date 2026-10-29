@@ -1,0 +1,44 @@
+---
+title: "FAQ"
+description: "Common questions about deposits, withdrawals, and vault management."
+---
+
+<AccordionGroup>
+  <Accordion title="When do I receive my shares?">
+    After your deposit settles at a valuation in a later 4-hour window. The keeper normally settles eligible requests automatically. Private vaults also need manager approval. [Settlement timing](/concepts/vaults-and-nav#settlement-timing) explains the schedule.
+  </Accordion>
+  <Accordion title="Why is my withdrawal delayed?">
+    The vault may need a new valuation, manager approval, or more available deposit tokens. Pauses can also stop settlement. The manager must free invested funds when needed. The keeper does not close positions to pay withdrawals.
+  </Accordion>
+  <Accordion title="Can I cancel a request?">
+    You can cancel before a later valuation locks it. In private vaults, cancellation also remains available while waiting for manager approval. A deposit can be cancelled when NAV per share is zero. Open the vault page to see available actions.
+  </Accordion>
+  <Accordion title="Why does my final amount differ from the estimate?">
+    The estimate uses the price available when you submit the request. Your final shares or payout use the valuation at settlement. [Shares and pricing](/concepts/vaults-and-nav) explains the difference.
+  </Accordion>
+  <Accordion title="Can a manager send vault funds to a personal wallet?">
+    Managers invest through the program's permitted actions. They cannot freely transfer vault funds to a personal wallet. They can claim earned fees as shares. Investment losses and protocol failures can still put your deposit at risk. Read [Custody and risks](/concepts/protocol).
+  </Accordion>
+  <Accordion title="What fees do I pay?">
+    Vaults can charge performance and management fees. Hedgin can also charge a platform management fee. Check your vault's rates and the [fee guide](/concepts/fees) before depositing.
+  </Accordion>
+  <Accordion title="Do I need an API key to deposit?">
+    No. Deposit and withdraw through the website with your wallet. API keys are for manager integrations.
+  </Accordion>
+</AccordionGroup>
+
+## Pending or failed actions
+
+If an action has no clear result, check its transaction link and refresh the vault before trying again.
+
+| Result | What to do |
+| --- | --- |
+| Pending or unknown | Wait for a final result. Repeating the action can execute it twice. |
+| Failed or expired | Refresh balances and settings, read the error, and retry if the action still applies. |
+| Confirmed | Check the updated vault or position. A confirmed deposit or withdrawal request still waits for settlement. |
+
+Some actions, such as opening or exiting a wide liquidity position, complete in several steps. If a later step fails, earlier completed steps remain. Reopen the position and continue from its current state.
+
+For a request waiting on valuation, approval, or liquidity, see [Follow your requests](/depositors/deposits-and-withdrawals#follow-your-requests).
+
+Bot developers can find integration details in [Send and status](/api-reference/send-and-status).

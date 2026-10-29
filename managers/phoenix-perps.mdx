@@ -1,164 +1,52 @@
 ---
 title: "Trade perpetuals with Phoenix"
-description: "Set up a USDC vault's Phoenix trading account, move collateral, place and cancel orders, and wind the account down."
+sidebarTitle: "Phoenix perpetuals"
+description: "Set up perpetual trading, manage collateral and orders, and close positions."
 ---
 
-Phoenix Perpetuals is a Solana market for **perpetual futures**, usually called perps. A perp lets you bet on a price going up (long) or down (short), often with **leverage**: a position larger than the collateral behind it. A Hedgin vault can trade perps from its own Phoenix account. This page shows how, from the **Perps** tab of the manager console.
+Phoenix perpetual futures let a USDC vault take long or short positions with leverage. Use **Perps** in the [manager console](https://hedgin.xyz/manage).
 
 <Warning>
-Leverage magnifies losses as well as gains. If losses use up the account's margin, Phoenix **liquidates** the account: it closes positions at a loss to cover them. The vault can lose all the collateral it moved into Phoenix.
+Leverage magnifies losses. All positions share collateral in the vault's Phoenix account. Liquidation can consume all collateral in that account.
 </Warning>
-
-## What you need
-
-| Requirement | Why |
-| --- | --- |
-| A vault whose deposit token is **USDC** | Phoenix settles in USDC, so the program accepts Phoenix only for USDC vaults. |
-| Idle USDC in the vault | To use as collateral. |
-| The vault's authority wallet, connected to the console | To approve each action. |
-
-## How the vault's Phoenix account works
-
-Each vault gets at most one Phoenix **cross-margin account**. Cross-margin means all positions in the account share one pool of collateral.
-
-```mermaid
-flowchart LR
-    W["Your wallet"] -- "Asks" --> P["Hedgin program<br/>checks every<br/>Phoenix account"]
-    P --> V["Vault program address"]
-    V -- "Controls" --> A["Vault's Phoenix<br/>cross-margin account"]
-```
-
-The vault's program address controls the account, not your wallet.
-
-**Collateral** is the USDC that backs your positions. When you add collateral, Phoenix's Ember service wraps the vault's USDC one-for-one into the token Phoenix uses internally. The vault's USDC still counts toward its value while it sits in Phoenix.
-
-### How the keeper values the account
-
-| Rule | Detail |
-| --- | --- |
-| Value | **Equity** = collateral + open profit and loss at the current mark price. |
-| Floor | Equity never counts below zero. |
-| Stale price | If any open position's market has a mark price older than about 10 minutes, the keeper does not post a NAV for the vault until the price updates. |
 
 ## Set up trading
 
-The **Perps** tab shows **Enable perps trading** until setup is done. Setup is two transactions, once per vault.
+1. Select **Create account** and approve.
+2. Select **Activate trading** and approve.
+3. Use **Add collateral** to move the vault's idle USDC into Phoenix.
 
-```mermaid
-stateDiagram-v2
-    state "No account" as NoAccount
-    [*] --> NoAccount
-    NoAccount --> Registered: Create account
-    Registered --> Ready: Activate trading
-    Ready --> Ready: Add collateral, trade
-```
+Each vault has one Phoenix account. Its collateral and open profit or loss count toward vault valuation.
 
-<Steps>
-  <Step title="Create the account">
-    Select **Create account** and approve the transaction. The program registers the vault's Phoenix account and records it as a strategy. You pay the account rent.
-  </Step>
-  <Step title="Activate trading">
-    Select **Activate trading** and approve. You sign only as the fee payer. Phoenix then co-signs and submits the transaction, which turns on deposits and orders for the account.
-  </Step>
-  <Step title="Add collateral">
-    Move some of the vault's idle USDC into the account. The next section shows how.
-  </Step>
-</Steps>
+## Place and manage orders
 
-## Move collateral
+1. Choose a market and **Long** or **Short**.
+2. Choose **Market** for an immediate trade or **Limit** to specify a price.
+3. Enter the size and leverage.
+4. Review the estimated fill, liquidation price, account leverage, and fees before submitting.
 
-1. In the account panel, select **Add** or **Remove**.
-2. Enter the USDC amount.
-3. Select **Add collateral** or **Remove collateral** and approve.
+Use **Reduce only** to shrink a position without opening or reversing one. Use **Post only** when a limit order must rest on the order book rather than execute immediately.
 
-```mermaid
-flowchart TD
-    I["Vault idle USDC"] -- "Add collateral<br/>(wrapped 1:1)" --> A["Phoenix account"]
-    A -- "Remove collateral" --> Q{"Paid at once?"}
-    Q -- "Yes" --> I
-    Q -- "No, queued" --> R["Arrives later, still wrapped:<br/>returned from Phoenix,<br/>awaiting unwrap"]
-    R -- "Unwrap" --> I
-```
+Review open positions under **Positions** and cancel resting orders under **Open orders**. Monitor account margin as well as individual positions.
 
-Phoenix can queue a large withdrawal instead of paying it at once. Select **Unwrap** to turn queued USDC back into USDC in the vault's idle balance.
+## Withdraw collateral
 
-The account panel also shows **Equity**, **Available to trade**, **Margin used**, **Account leverage**, and **Margin ratio**.
+Use **Remove collateral** to return available funds to the vault. Phoenix can queue a withdrawal. Once returned funds are available, select **Unwrap** to make them available as idle USDC.
 
-<Warning>
-Phoenix liquidates the account when the margin ratio reaches 100%.
-</Warning>
+Funds still in Phoenix or awaiting return cannot pay depositor withdrawals.
 
-## Place an order
+## Trading restrictions
 
-<Steps>
-  <Step title="Pick the market and side">
-    Choose a market, then select **Long** or **Short**.
-  </Step>
-  <Step title="Pick the order type">
-    Select **Market** to trade now at the best available price, or **Limit** to set your own price and wait.
-  </Step>
-  <Step title="Set the size and leverage">
-    Enter the size as **Margin** in USDC or as **Size** in the market's asset. Drag **Leverage** from 1x up to the market's maximum. The default is 5x, or the market maximum if that is lower.
-  </Step>
-  <Step title="Set the options">
-    Pick the options in the table below.
-  </Step>
-  <Step title="Check and submit">
-    Check **Est. fill price**, **Price impact**, **Est. liquidation price**, **Account leverage**, and **Fee**. Then submit and approve.
-  </Step>
-</Steps>
-
-| Option | Effect |
-| --- | --- |
-| **Reduce only** | Shrinks an open position without opening or flipping one. |
-| **Post only** | Makes a limit order rest on the book and pay the maker fee, or fail instead of trading at once. |
-| Slippage, market orders | 0.1%, 0.5%, 1%, or 2%. |
-
-| Tab | Shows |
-| --- | --- |
-| **Positions** | Your open positions. |
-| **Open orders** | Your resting orders. Cancel an order here. |
-| **Trade history** | Your past fills. |
-
-### What the status allows
-
-| Action | Normal | Reduce only | Paused |
-| --- | --- | --- | --- |
-| Add collateral | Yes | No | No |
-| Remove collateral | Yes | Yes | No |
-| Place limit orders | Yes | No | No |
-| Place reduce-only market orders | Yes | Yes | No |
-| Cancel orders | Yes | Yes | No |
-| Unwrap queued USDC | Yes | Yes | No |
-
-In **Normal** status, every Phoenix action works. In **Paused** status, every Phoenix action is blocked.
+Normal status permits trading. Reduce-only permits collateral withdrawals, order cancellation, unwrapping, and reduce-only market orders. It blocks new risk and collateral deposits. Paused status blocks Phoenix actions.
 
 ## Wind down the account
 
-To stop trading Perps and close the strategy:
+1. Close all positions.
+2. Cancel all open orders.
+3. Remove all collateral.
+4. Wait for queued withdrawals and unwrap returned funds.
+5. In **Portfolio**, select **Close strategy** once the account is empty.
 
-<Steps>
-  <Step title="Close every open position">
-    In the **Positions** tab, the close action places a reduce-only market order that fills within 1% of the mark price or fails without trading.
-  </Step>
-  <Step title="Cancel every open order">
-    Cancel them in the **Open orders** tab.
-  </Step>
-  <Step title="Remove all collateral">
-    Use **Remove collateral** in the account panel.
-  </Step>
-  <Step title="Unwrap">
-    Wait for any queued withdrawal to arrive, then select **Unwrap**.
-  </Step>
-  <Step title="Close the strategy">
-    In the **Portfolio** tab, select **Close strategy** on the Perps row. The button stays disabled until the account is empty.
-  </Step>
-</Steps>
+Phoenix trader accounts cannot be closed, so their account deposit is not refunded.
 
-<Note>
-Phoenix has no way to close a trader account, so the rent for that account stays with Phoenix.
-</Note>
-
-## Use a bot
-
-The [manager bot API](/api-reference/introduction) covers the same flow: account setup, activation, collateral, orders, cancels, and unwrap. Activation is special: the bot submits it through a separate route, because Phoenix co-signs and sends it. The API reference describes each action and its status values.
+To automate Phoenix actions, use the [SDK examples](/sdk/examples) or [Manager API](/api-reference/introduction).

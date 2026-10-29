@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="fee-sankey-root" viewBox="0 0 480 328" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="fee-sankey-title fee-sankey-desc">
+<title id="fee-sankey-title">Where investment gains go</title>
+<desc id="fee-sankey-desc">An illustrative $2,000 investment gain splits directly into $1,500 depositor profit, $350 manager fees, and $150 Hedgin fees.</desc>
+<defs><style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap');
+#fee-sankey-root { background:#0b0e10; font-family:Inter,system-ui,sans-serif; }
+.node { fill:#e5e7eb; }
+.profit { fill:#38bdf8; fill-opacity:.65; }
+.fee { fill:#bfc0c0; fill-opacity:.46; }
+.name { fill:#e5e7eb; font-size:18px; font-weight:600; }
+.amount { fill:#bfc0c0; font-size:20px; font-weight:400; }
+</style></defs>
+<rect width="480" height="328" fill="#0b0e10"/>
+<path class="profit" data-target="depositors" data-amount="1500" d="M 36 96 C 164 96 164 48 292 48 L 292 168 C 164 168 164 216 36 216 Z"/>
+<path class="fee" data-target="manager" data-amount="350" d="M 36 216 C 164 216 164 208 292 208 L 292 236 C 164 236 164 244 36 244 Z"/>
+<path class="fee" data-target="hedgin" data-amount="150" d="M 36 244 C 164 244 164 284 292 284 L 292 296 C 164 296 164 256 36 256 Z"/>
+<rect class="node" data-node="gain" data-amount="2000" x="24" y="96" width="12" height="160"/>
+<rect class="node" data-node="depositors" data-amount="1500" x="292" y="48" width="12" height="120"/>
+<rect class="node" data-node="manager" data-amount="350" x="292" y="208" width="12" height="28"/>
+<rect class="node" data-node="hedgin" data-amount="150" x="292" y="284" width="12" height="12"/>
+<text class="name" x="24" y="32">Investment gain</text>
+<text class="amount" x="24" y="60">$2,000</text>
+<text class="name" x="320" y="100">Your profit</text>
+<text class="amount" x="320" y="132">$1,500</text>
+<text class="name" x="320" y="212">Manager fees</text>
+<text class="amount" x="320" y="244">$350</text>
+<text class="name" x="320" y="280">Hedgin fees</text>
+<text class="amount" x="320" y="312">$150</text>
+</svg>

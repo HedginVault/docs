@@ -1,65 +1,46 @@
 ---
-title: "Manager bot API"
-description: "What the Hedgin manager bot API V1 does, who it is for, and how its endpoints fit together."
+title: "Manager API"
+description: "Read vault data and automate manager actions over HTTP."
 ---
 
-The manager bot API lets an approved bot read the vaults its manager controls and get Solana transactions built for them. The bot signs each transaction on its own machine. Hedgin never holds the signing key.
+The Manager API supports vault reads, Jupiter swaps, Meteora DLMM positions and orders, Phoenix perpetuals, and vault management.
 
-Base URL: `https://hedgin.xyz/api/external/v1`
+Base URL is `https://hedgin.xyz/api/external/v1`.
+
+You need an API key with the required permissions and a manager signing key. Create a vault-scoped key under **Connect AI** in the manager console, or ask Hedgin for access your integration requires. See [Authentication](/api-reference/authentication).
+
+The API key authorizes requests. Your signer approves transactions locally. Keep both secrets out of logs, URLs, and prompts.
 
 <Warning>
-The API runs only on Solana mainnet-beta. There is no test deployment. Every transaction you send moves real funds. Develop against the read endpoints first, with no signing key loaded. Then trade from a dedicated vault that holds a small balance.
+The API operates on Solana mainnet. Sent transactions can move real funds. Start with read endpoints before enabling trading.
 </Warning>
 
-## Two keys, two jobs
+## Run an action
 
-A bot works with two separate secrets:
+For raw HTTP integrations, build the action, sign the returned transaction locally, submit it with its ticket, and check status with its receipt. Follow any returned ordering or continuation fields. [Send and status](/api-reference/send-and-status) defines this contract.
 
-- The **API key** (`hv1_<id>_<secret>`) lets the bot call this HTTP API. A Hedgin administrator issues it and decides what it may do. See [Authentication](/api-reference/authentication).
-- The **manager signing key** is the Solana keypair that is the vault's on-chain authority. The bot keeps it locally and signs every transaction with it.
+An unknown result may still complete. Check its status before repeating an action.
 
-The API key cannot sign anything and cannot get around the program's checks. The Solana program checks the manager's signature on every transaction.
+For TypeScript, use the [SDK](/sdk/getting-started) to handle execution and outcome tracking.
 
-## How a transaction flows
+## Supported operations
 
-A write is never a single call. The bot moves through four separate states, and each one can fail on its own:
+| Group | Coverage |
+| --- | --- |
+| Vault reads | Vault details, holdings, strategies, NAV, requests, history, and Phoenix accounts. |
+| Market reads | Jupiter quotes, DLMM pools, and token information. |
+| Trading | Jupiter swaps, DLMM liquidity and limit orders, and Phoenix setup, collateral, and orders. |
+| Management | Create and update vaults, approve or reject requests, claim fees, and close strategies or vaults. |
 
-1. **Build.** `POST /transactions/{action}` returns an unsigned transaction and a short-lived ticket.
-2. **Sign.** The bot signs the exact transaction locally with the manager key.
-3. **Send.** `POST /transactions/send` checks the signed bytes against the ticket and relays them to Solana.
-4. **Confirm.** `GET /transactions/status` reports whether the transaction landed.
+Creating depositor requests, settling requests, editing profiles, and administrator actions are outside this API.
 
-A successful send is not a confirmed transaction. Only `confirmed` from the status endpoint means the action happened. [Send and status](/api-reference/send-and-status) covers the full sequence.
+## Integration guides
 
-## Endpoint groups
+- [Getting started](/api-reference/getting-started) provides a first integration.
+- [Authentication](/api-reference/authentication) covers key permissions and restrictions.
+- [Units and views](/api-reference/units-and-views) defines amounts and response fields.
+- [Send and status](/api-reference/send-and-status) covers execution and recovery.
+- [Errors and limits](/api-reference/errors-and-limits) lists errors and request limits.
+- [Examples](/api-reference/examples) provides a TypeScript integration without the SDK.
 
-| Group | Endpoints | Key scope |
-| --- | --- | --- |
-| Vault reads | `GET /vaults`, `GET /vaults/{vault}`, and `GET /vaults/{vault}/` followed by `holdings`, `strategies`, `nav`, `requests`, `strategy-history`, or `phoenix` | `read` |
-| Market reads | `GET /jupiter/quote`, `GET /dlmm/pools`, `GET /dlmm/pools/{lbPair}`, `GET /tokens/{mint}` | `read` |
-| Transaction builders | `POST /transactions/{action}` | The exact action name |
-| Send | `POST /transactions/send` | `send` and the action that built the ticket |
-| Phoenix onboarding submit | `POST /transactions/phoenix/onboard/submit` | `send` and `phoenix/onboard` |
-| Status | `GET /transactions/status` | `send` |
-
-## Builder actions
-
-V1 has 28 builder actions:
-
-- **Jupiter:** `jupiter/initialize`, `jupiter/swap`, `jupiter/sweep`.
-- **Meteora DLMM positions:** `dlmm/initialize`, `dlmm/open`, `dlmm/add`, `dlmm/remove`, `dlmm/flip`, `dlmm/claim-fee`, `dlmm/zap-out`, `dlmm/close`.
-- **Meteora DLMM continuations:** `dlmm/extend`, `dlmm/add-range`, `dlmm/zap-out/swap`. A bot usually reaches these through a `next` step that an earlier build returned.
-- **Meteora DLMM limit orders:** `dlmm/limit-order/place`, `dlmm/limit-order/cancel`.
-- **Phoenix perpetuals:** `phoenix/initialize`, `phoenix/onboard`, `phoenix/deposit`, `phoenix/withdraw`, `phoenix/order`, `phoenix/cancel`, `phoenix/sweep`.
-- **Vault:** `vault/initialize`, `vault/update`, `vault/claim-fee`, `vault/close`.
-- **Strategy:** `strategy/close`.
-
-Depositor actions, request resolution, and administrator actions are not part of V1.
-
-## Where to go next
-
-- [Getting started](/api-reference/getting-started) walks through a first read, build, and send.
-- [Units and views](/api-reference/units-and-views) explains amounts, bin ids, and response shapes.
-- [Errors and limits](/api-reference/errors-and-limits) lists error codes and rate limits.
-- [Examples](/api-reference/examples) has a complete TypeScript send loop.
-- For TypeScript bots, the [Hedgin SDK](/sdk/overview) wraps these calls and their safety rules.
+The endpoint reference lists each operation's fields.

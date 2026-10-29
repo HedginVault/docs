@@ -1,70 +1,33 @@
 ---
-title: "Hedgin documentation"
-description: "Hedgin runs Solana investment vaults with program-enforced custody. Learn how to deposit, manage a vault, or build a bot."
+title: "Introduction"
+description: "Managed investment vaults on Solana."
 ---
 
-Hedgin runs investment vaults on Solana. You deposit one token, such as USDC, and get vault shares. A whitelisted manager invests the vault. Every 4 hours Hedgin values the vault, and waiting deposits and withdrawals settle at that price.
+## What is Hedgin?
 
-```mermaid
-flowchart LR
-    D["Depositor"] -- "deposit token" --> V["Vault<br/>(held by the Solana program)"]
-    V -- "shares" --> D
-    M["Manager"] -. "signs trades" .-> V
-    V <--> J["Jupiter swaps"]
-    V <--> L["Meteora DLMM"]
-    V <--> P["Phoenix perps"]
-    K["NAV keeper<br/>(every 4 hours)"] -. "posts value" .-> V
-```
+Hedgin connects depositors with vault managers. You deposit a token, such as USDC, into a vault. The manager invests it, and you hold shares that reflect the vault's value.
 
-A Solana program holds the vault's tokens. The manager can trade them only through those three venues and cannot send them anywhere else. Depositors get tokens back only to their own wallet.
+Managers trade through Jupiter, Meteora DLMM, and Phoenix Perpetuals. Vault funds are held by Hedgin's Solana program, with defined permissions for trading and withdrawals.
 
-<Note>
-Hedgin runs on Solana mainnet. Every transaction moves real funds. There is no public test deployment.
-</Note>
-
-## Start with your role
+## Get started
 
 <CardGroup cols={2}>
-  <Card title="Depositors" icon="wallet" href="/depositors/deposits-and-withdrawals">
-    Deposit into a vault, follow your request, and withdraw.
+  <Card title="Deposit into a vault" icon="wallet" href="/depositors/deposits-and-withdrawals">
+    Choose a vault, deposit, and withdraw your funds.
   </Card>
-  <Card title="Vault managers" icon="chart-line" href="/managers/overview">
-    Create a vault, set fees, invest it, and claim your fees.
-  </Card>
-  <Card title="Bot builders" icon="robot" href="/api-reference/introduction">
-    Automate manager actions with the manager bot API.
-  </Card>
-  <Card title="TypeScript SDK" icon="code" href="/sdk/overview">
-    Call the API with typed reads and one-call transaction execution.
+  <Card title="Manage a vault" icon="chart-line" href="/managers/overview">
+    Create a vault, invest its capital, and manage requests.
   </Card>
 </CardGroup>
 
-## Understand how it works
+## Before you deposit
 
-<CardGroup cols={3}>
-  <Card title="The protocol" icon="shield-halved" href="/concepts/protocol">
-    Who holds the money, who can move it, and which rules apply.
-  </Card>
-  <Card title="Vaults and NAV" icon="scale-balanced" href="/concepts/vaults-and-nav">
-    How shares are priced, when requests settle, and how fees work.
-  </Card>
-  <Card title="Transactions" icon="arrow-right-arrow-left" href="/concepts/transactions">
-    Why a sent transaction is not a finished one.
-  </Card>
-</CardGroup>
+Your shares gain or lose value with the vault's investments. Deposits and withdrawals settle after a valuation in a later 4-hour window. Withdrawals also depend on available funds and any manager approval requirements.
 
-## Manage a vault's strategies
+Read about [shares and pricing](/concepts/vaults-and-nav), review the [fees](/concepts/fees), and understand the [risks](/concepts/protocol).
 
-<CardGroup cols={3}>
-  <Card title="Jupiter swaps" icon="arrows-rotate" href="/managers/jupiter-swaps">
-    Swap vault tokens with on-chain slippage checks.
-  </Card>
-  <Card title="Meteora DLMM" icon="chart-column" href="/managers/meteora-dlmm">
-    Provide liquidity in price bins and place limit orders.
-  </Card>
-  <Card title="Phoenix perps" icon="bolt" href="/managers/phoenix-perps">
-    Trade perpetuals from a USDC vault.
-  </Card>
-</CardGroup>
+## Build with Hedgin
 
-Not sure where to begin? [Start here](/start-here) matches each goal to the right tool.
+Automate manager actions with the [TypeScript SDK](/sdk/getting-started) or integrate through the [Manager API](/api-reference/introduction).
+
+For management from chat, use the [Telegram bot](/managers/telegram-bot). For common questions, read the [FAQ](/faq).

@@ -1,71 +1,22 @@
 ---
-title: "Overview"
-description: "@hedginxyz/sdk is a TypeScript client for the Hedgin manager API. It runs a manager action from build to confirmation in one call and refuses to sign unsafe transactions."
+title: "SDK overview"
+description: "Automate Hedgin vaults with the TypeScript SDK."
 ---
 
-`@hedginxyz/sdk` lets a bot or script manage a Hedgin vault: swap with Jupiter, provide liquidity on Meteora DLMM, trade Phoenix perpetuals, and administer the vault. One call runs each action from build to confirmation.
+`@hedginxyz/sdk` lets TypeScript bots and scripts manage Hedgin vaults. It supports Jupiter swaps, Meteora DLMM liquidity and limit orders, Phoenix perpetuals, and vault management.
 
-The API builds every transaction. The SDK inspects what comes back, signs it locally with your manager wallet, sends it, and tracks the result. The wallet key never leaves your process, and the SDK refuses to sign any transaction that could move funds out of the manager wallet.
+Use `execute` to run an action and receive its outcome. Your manager key stays in your process. The SDK checks transactions against its signing policy before requesting a signature.
 
-<Note>
-  Prefer clicking to coding? The [Telegram bot](/managers/telegram-bot) runs the same actions from a chat. For raw HTTP, see the [API reference](/api-reference/introduction).
-</Note>
+## Start building
 
-## How it works
+| Guide | Use it to |
+| --- | --- |
+| [Getting started](/sdk/getting-started) | Install the SDK, configure a signer, and run an action. |
+| [Examples](/sdk/examples) | Implement swaps, liquidity management, and perpetual trading. |
+| [Reference](/sdk/reference) | Look up methods, types, helpers, and errors. |
+| [Execution and safety](/sdk/safety) | Handle outcomes and understand signing restrictions. |
+| [API checker](/sdk/api-checker) | Check an API integration against the SDK's expected responses. |
 
-<Steps>
-  <Step title="Build">
-    `execute` sends your action to the manager API. The API builds and simulates one or more unsigned transactions.
-  </Step>
-  <Step title="Inspect">
-    The SDK checks every transaction against its signing policy before it signs anything. One bad transaction refuses the whole build.
-  </Step>
-  <Step title="Sign and send">
-    Your `TransactionSigner` signs locally. The SDK sends each transaction with a short-lived ticket that proves the API built it.
-  </Step>
-  <Step title="Confirm">
-    The SDK polls until every transaction lands or fails, follows multi-step continuations, and returns one typed `Outcome`.
-  </Step>
-</Steps>
+Use base-unit strings for token amounts and handle every returned outcome. If a result is unresolved, check the pending transaction before repeating the action.
 
-## Features
-
-<CardGroup cols={2}>
-  <Card title="One call per action" icon="bolt">
-    Jupiter, Meteora DLMM, Phoenix, and vault admin actions, each typed per builder.
-  </Card>
-  <Card title="Safe signing" icon="shield-check">
-    A local policy refuses wrong payers, unknown programs, and high priority fees.
-  </Card>
-  <Card title="Honest outcomes" icon="circle-check">
-    `confirmed`, `refused`, `failed`, or `unresolved`. It never resends a transaction with an unknown result.
-  </Card>
-  <Card title="Exact amounts" icon="calculator">
-    Amounts are base-unit strings, never JavaScript numbers. Unit and DLMM price helpers included.
-  </Card>
-</CardGroup>
-
-## TypeScript SDK
-
-<CardGroup cols={3}>
-  <Card title="Getting started" icon="rocket" href="/sdk/getting-started">
-    Install, create a client, and run your first action.
-  </Card>
-  <Card title="Examples" icon="code" href="/sdk/examples">
-    Recipes for each protocol and for handling outcomes.
-  </Card>
-  <Card title="Reference" icon="book" href="/sdk/reference">
-    Every method, action, helper, type, and error.
-  </Card>
-</CardGroup>
-
-## Guides
-
-<CardGroup cols={2}>
-  <Card title="Execute and safety" icon="lock" href="/sdk/safety">
-    The signing policy, batches, continuations, and unknown outcomes.
-  </Card>
-  <Card title="API checker" icon="stethoscope" href="/sdk/api-checker">
-    Probe a live API for drift from the SDK's schemas.
-  </Card>
-</CardGroup>
+For raw HTTP, use the [Manager API](/api-reference/introduction). To manage from chat, see the [Telegram bot](/managers/telegram-bot).

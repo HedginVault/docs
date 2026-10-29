@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
+  "theme": "aspen",
   "name": "Hedgin",
   "colors": {
     "primary": "#38bdf8",
@@ -26,21 +26,21 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Get started",
         "groups": [
           {
-            "group": "Get started",
+            "group": "Overview",
             "pages": [
               "index",
               "start-here"
             ]
           },
           {
-            "group": "Concepts",
+            "group": "Vaults",
             "pages": [
-              "concepts/protocol",
               "concepts/vaults-and-nav",
-              "concepts/transactions"
+              "concepts/fees",
+              "concepts/protocol"
             ]
           },
           {
@@ -53,10 +53,21 @@
             "group": "Managers",
             "pages": [
               "managers/overview",
+              "managers/telegram-bot"
+            ]
+          },
+          {
+            "group": "Trading",
+            "pages": [
               "managers/jupiter-swaps",
               "managers/meteora-dlmm",
-              "managers/phoenix-perps",
-              "managers/telegram-bot"
+              "managers/phoenix-perps"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "faq"
             ]
           }
         ]
@@ -66,7 +77,7 @@
         "openapi": "api-reference/openapi.json",
         "groups": [
           {
-            "group": "Overview",
+            "group": "Integration guides",
             "pages": [
               "api-reference/introduction",
               "api-reference/getting-started",
@@ -168,7 +179,7 @@
             ]
           },
           {
-            "group": "TypeScript SDK",
+            "group": "Build with TypeScript",
             "pages": [
               "sdk/getting-started",
               "sdk/examples",
@@ -176,7 +187,7 @@
             ]
           },
           {
-            "group": "Guides",
+            "group": "Execution and tools",
             "pages": [
               "sdk/safety",
               "sdk/api-checker"
@@ -204,6 +215,10 @@
     {
       "source": "/sdk/actions",
       "destination": "/sdk/reference#actions"
+    },
+    {
+      "source": "/concepts/transactions",
+      "destination": "/faq#pending-or-failed-actions"
     }
   ]
 }
