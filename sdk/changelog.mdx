@@ -3,6 +3,11 @@ title: "Changelog"
 description: "Release notes for @hedginxyz/sdk."
 ---
 
+<Update label="0.3.0" description="October 28, 2026">
+  - Adds optional `outputMint` to `dlmm/zap-out` so you can receive either pool token. It defaults to the vault's deposit token.
+  - Fixes signing for Jupiter swaps that require Pump.fun AMM account setup. The manager pays the account's rent.
+</Update>
+
 <Update label="0.2.1" description="October 18, 2026">
   - Adds the `phoenix/tpsl` action, which replaces or removes a market's take-profit and stop-loss.
   - `getVault` accepts a response that omits `unmanagedHoldings`. A missing list means unknown, not empty.
