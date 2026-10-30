@@ -1,29 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="fee-sankey-root" viewBox="0 0 480 328" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="fee-sankey-title fee-sankey-desc">
-<title id="fee-sankey-title">Where investment gains go</title>
-<desc id="fee-sankey-desc">An illustrative $2,000 investment gain splits directly into $1,500 depositor profit, $350 manager fees, and $150 Hedgin fees.</desc>
+<svg id="fee-sankey-root" viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="fee-sankey-title fee-sankey-desc">
+<title id="fee-sankey-title">Performance fee example</title>
+<desc id="fee-sankey-desc">With a 20% performance fee and a 20% Hedgin share of that fee, users keep 80% of eligible profit, the manager receives 16%, and Hedgin receives 4%, before management fees.</desc>
 <defs><style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap');
 #fee-sankey-root { background:#0b0e10; font-family:Inter,system-ui,sans-serif; }
-.node { fill:#e5e7eb; }
-.profit { fill:#38bdf8; fill-opacity:.65; }
-.fee { fill:#bfc0c0; fill-opacity:.46; }
-.name { fill:#e5e7eb; font-size:18px; font-weight:600; }
-.amount { fill:#bfc0c0; font-size:20px; font-weight:400; }
+.name { fill:#e5e7eb; font-size:16px; font-weight:600; }
+.detail { fill:#a4afbd; font-size:14px; }
+.accent { fill:#38bdf8; }
 </style></defs>
-<rect width="480" height="328" fill="#0b0e10"/>
-<path class="profit" data-target="depositors" data-amount="1500" d="M 36 96 C 164 96 164 48 292 48 L 292 168 C 164 168 164 216 36 216 Z"/>
-<path class="fee" data-target="manager" data-amount="350" d="M 36 216 C 164 216 164 208 292 208 L 292 236 C 164 236 164 244 36 244 Z"/>
-<path class="fee" data-target="hedgin" data-amount="150" d="M 36 244 C 164 244 164 284 292 284 L 292 296 C 164 296 164 256 36 256 Z"/>
-<rect class="node" data-node="gain" data-amount="2000" x="24" y="96" width="12" height="160"/>
-<rect class="node" data-node="depositors" data-amount="1500" x="292" y="48" width="12" height="120"/>
-<rect class="node" data-node="manager" data-amount="350" x="292" y="208" width="12" height="28"/>
-<rect class="node" data-node="hedgin" data-amount="150" x="292" y="284" width="12" height="12"/>
-<text class="name" x="24" y="32">Investment gain</text>
-<text class="amount" x="24" y="60">$2,000</text>
-<text class="name" x="320" y="100">Your profit</text>
-<text class="amount" x="320" y="132">$1,500</text>
-<text class="name" x="320" y="212">Manager fees</text>
-<text class="amount" x="320" y="244">$350</text>
-<text class="name" x="320" y="280">Hedgin fees</text>
-<text class="amount" x="320" y="312">$150</text>
+<rect width="480" height="360" fill="#0b0e10"/>
+<path fill="#263344" data-source="profit" data-target="users" data-amount="80" d="M 72 16 H 340 V 176 H 72 Z"/>
+<path fill="#38bdf8" fill-opacity=".42" data-source="profit" data-target="fee" data-amount="20" d="M 72 176 C 148 176 148 240 224 240 V 280 C 148 280 148 216 72 216 Z"/>
+<path fill="#38bdf8" fill-opacity=".42" data-source="fee" data-target="manager" data-amount="16" d="M 232 240 H 340 V 272 H 232 Z"/>
+<path fill="#38bdf8" data-source="fee" data-target="hedgin" data-amount="4" d="M 232 272 C 286 272 286 312 340 312 V 320 C 286 320 286 280 232 280 Z"/>
+<rect fill="#b8c2ce" data-node="profit" data-amount="100" x="64" y="16" width="8" height="200" rx="2"/>
+<rect fill="#83909f" data-node="users" data-amount="80" x="340" y="16" width="8" height="160" rx="2"/>
+<rect fill="#278bb5" data-node="fee" data-amount="20" x="224" y="240" width="8" height="40" rx="2"/>
+<rect fill="#278bb5" data-node="manager" data-amount="16" x="340" y="240" width="8" height="32" rx="2"/>
+<rect fill="#38bdf8" data-node="hedgin" data-amount="4" x="340" y="312" width="8" height="8" rx="2"/>
+<text class="name" x="52" y="112" text-anchor="end">Profit</text>
+<text class="detail" x="52" y="132" text-anchor="end">100%</text>
+<text class="name" x="360" y="88">Users</text>
+<text class="detail" x="360" y="112">80%</text>
+<text class="name" x="224" y="208">Manager fee</text>
+<text class="detail" x="224" y="228">e.g. 20%</text>
+<text class="name" x="360" y="252">Manager</text>
+<text class="detail" x="360" y="276">16%</text>
+<text class="name accent" x="360" y="316">Hedgin</text>
+<text class="detail accent" x="360" y="340">4%</text>
 </svg>

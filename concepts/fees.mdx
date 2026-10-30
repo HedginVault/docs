@@ -5,19 +5,29 @@ description: "What you pay, how fees affect your shares, and when rates can chan
 
 Fees reduce the value of your shares. Check your vault's rates before depositing. The limits below are maximums, not the rates every vault charges.
 
-## Your profit after fees
+## How fees are shared
 
 Your return comes from gains on the vault's investments, after fees.
 
-This example shows a **$2,000 investment gain**, excluding the original deposit. Amounts are illustrative, not forecasts or vault rates.
+This example uses a **20% performance fee**, with **20% of that fee going to Hedgin**. The split applies to eligible profit after the vault's loss recovery adjustment, before management fees. Rates are illustrative. Check your vault's actual rates.
 
-<iframe src="/images/fee-sankey.svg" title="Where investment gains go" width="100%" height="auto" style={{ border: 0, display: "block", width: "100%", maxWidth: "480px", aspectRatio: "480 / 328", height: "auto" }} />
+<div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "center", margin: "24px 0" }}>
+  <iframe src="/images/fee-sankey.svg" title="Performance fee example" width="100%" height="auto" style={{ border: 0, display: "block", flex: "2 1 400px", minWidth: 0, width: "100%", aspectRatio: "480 / 360", height: "auto" }} />
+  <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", flex: "1 1 180px" }}>
+    <div style={{ flex: "1 1 140px", padding: "20px", border: "1px solid #1e607d", borderRadius: "10px", background: "#0c2230" }}>
+      <div style={{ color: "#38bdf8", fontSize: "48px", lineHeight: 1.1, marginBottom: "12px" }}>20%</div>
+      <div style={{ color: "#e5e7eb", fontSize: "15px", lineHeight: 1.5 }}>of the manager's performance fee goes to Hedgin</div>
+    </div>
+    <div style={{ flex: "1 1 140px", padding: "20px", border: "1px solid #1e607d", borderRadius: "10px", background: "#0c2230" }}>
+      <div style={{ color: "#38bdf8", fontSize: "48px", lineHeight: 1.1, marginBottom: "12px" }}>1%</div>
+      <div style={{ color: "#e5e7eb", fontSize: "15px", lineHeight: 1.5 }}>example platform management fee per year, on vault assets</div>
+    </div>
+  </div>
+</div>
+
+Management fees are separate from this profit split. Both the manager and Hedgin can charge them on vault assets.
 
 Your profit stays in the vault and increases share value until withdrawal. Manager and Hedgin fees accrue as shares.
-
-<Accordion title="Example fee breakdown">
-  The manager receives $150 in performance fees and $200 in management fees. Hedgin receives $50 from the performance fee and $100 in platform management fees. The example assumes no unrecovered losses.
-</Accordion>
 
 ## Performance fee
 
