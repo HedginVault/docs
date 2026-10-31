@@ -1042,7 +1042,7 @@
         ],
         "operationId": "build_jupiter_swap",
         "summary": "Swap tokens",
-        "description": "Requires key scope `jupiter/swap`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one.\n\nSwaps vault tokens through Jupiter. When this is the first swap into a token, the step also creates its Jupiter strategy (`initializesStrategy: true`). If the setup does not fit, the step creates the strategy only and `next` repeats `jupiter/swap`. When the swap sells the vault's whole balance of a non-deposit token, the step also closes that token's strategy, or `next` points to `jupiter/sweep` when the close does not fit.",
+        "description": "Requires key scope `jupiter/swap`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one.\n\nSwaps vault tokens through Jupiter. When this is the first swap into a token, the step also creates its Jupiter strategy (`initializesStrategy: true`). If the setup and the swap do not fit in one transaction, the result is a batch: a step that creates the strategy, then the swap. Sign both, then send them in order, waiting for the first to confirm. The swap is not simulated before the strategy exists. When the swap sells the vault's whole balance of a non-deposit token, the step also closes that token's strategy, or `next` points to `jupiter/sweep` when the close does not fit.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1089,7 +1089,7 @@
         },
         "responses": {
           "200": {
-            "description": "Build result. One step.",
+            "description": "Build result. One step or a batch.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1103,20 +1103,49 @@
                       "$ref": "#/components/schemas/PublicKey"
                     },
                     "result": {
-                      "allOf": [
+                      "oneOf": [
                         {
-                          "$ref": "#/components/schemas/BuiltStep"
+                          "title": "Single step",
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/BuiltStep"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "initializesStrategy"
+                              ],
+                              "properties": {
+                                "initializesStrategy": {
+                                  "type": "boolean",
+                                  "description": "`true` when this step creates the Jupiter strategy."
+                                }
+                              }
+                            }
+                          ]
                         },
                         {
-                          "type": "object",
-                          "required": [
-                            "initializesStrategy"
-                          ],
-                          "properties": {
-                            "initializesStrategy": {
-                              "type": "boolean",
-                              "description": "`true` when this step creates the Jupiter strategy."
-                            }
+                          "title": "Batch",
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/BuiltStep"
+                              },
+                              {
+                                "type": "object",
+                                "required": [
+                                  "initializesStrategy"
+                                ],
+                                "properties": {
+                                  "initializesStrategy": {
+                                    "type": "boolean",
+                                    "description": "`true` when this step creates the Jupiter strategy."
+                                  }
+                                }
+                              }
+                            ]
                           }
                         }
                       ]
