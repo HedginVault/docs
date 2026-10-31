@@ -1,0 +1,31 @@
+---
+title: "Get alerts when a vault needs you"
+sidebarTitle: "Alerts"
+description: "Receive Telegram and email alerts when a vault you manage needs action."
+---
+
+Hedgin can message you when a vault you manage needs action. Alerts go to the vault's manager wallet only. Delegates do not receive them.
+
+## Connect a channel
+
+Open the bell in the manager console and choose **Delivery Settings**. Sign in with your manager wallet first.
+
+- **Telegram:** select **Connect**. Telegram opens the Hedgin bot. Select **Start**. The link works once and expires after 10 minutes. To stop alerts from the chat, send `/alerts_off`.
+- **Email:** enter your address and select **Connect**. Enter the 6-digit code from the email and select **Verify**. The code expires after 10 minutes. You can request a new code after the countdown ends. Five wrong codes cancel it.
+
+Emails come from `notification@hedgin.xyz`. Each email has an unsubscribe link.
+
+Select **Send test alert** to check that your channels work.
+
+## Alerts and what to do
+
+Each alert has its own switch. A switch applies to Telegram and email. The bell always shows every alert.
+
+| Alert | When | What to do | Starts |
+| --- | --- | --- | --- |
+| Withdrawals short | Queued withdrawals, priced at the last NAV, exceed the vault's idle balance | Close or reduce a strategy position so idle funds cover the payout | On |
+| Valuation stalled | The keeper has failed to value the vault for 30 minutes | Check the named error, then contact Hedgin if an override is needed | On |
+| Guardian paused | A guardian paused the vault | Contact Hedgin | On |
+| Withdrawals waiting | Queued withdrawals that idle funds already cover | Nothing. The keeper pays them after the next NAV | Off |
+
+Hedgin checks every 5 minutes and sends each alert once. If a problem is still open in the next 4-hour epoch, you get one reminder for that epoch.
