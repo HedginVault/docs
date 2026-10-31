@@ -1,10 +1,10 @@
 ---
 title: "Get alerts when a vault needs you"
 sidebarTitle: "Alerts"
-description: "Receive Telegram and email alerts when a vault you manage needs action."
+description: "Receive Telegram and email alerts for deposit and withdrawal activity on vaults you manage."
 ---
 
-Hedgin can message you when a vault you manage needs action. Alerts go to the vault's manager wallet only. Delegates do not receive them.
+Hedgin can message you about deposit and withdrawal activity on the vaults you manage. Alerts go to the vault's manager wallet only. Delegates do not receive them.
 
 ## Connect a channel
 
@@ -19,13 +19,18 @@ Select **Send test alert** to check that your channels work.
 
 ## Alerts and what to do
 
-Each alert has its own switch. A switch applies to Telegram and email. The bell always shows every alert.
+There are two switches, **Deposits** and **Withdrawals**. Both start on. A switch applies to Telegram and email.
 
-| Alert | When | What to do | Starts |
-| --- | --- | --- | --- |
-| Withdrawals short | Queued withdrawals, priced at the last NAV, exceed the vault's idle balance | Close or reduce a strategy position so idle funds cover the payout | On |
-| Valuation stalled | The keeper has failed to value the vault for 30 minutes | Check the named error, then contact Hedgin if an override is needed | On |
-| Guardian paused | A guardian paused the vault | Contact Hedgin | On |
-| Withdrawals waiting | Queued withdrawals that idle funds already cover | Nothing. The keeper pays them after the next NAV | Off |
+| Switch | You get an alert when | What to do |
+| --- | --- | --- |
+| Deposits | A depositor requests a deposit | Nothing. It settles at the next valuation. You can reject it from the console before then |
+| Deposits | A deposit request is cancelled, settled or rejected | Nothing |
+| Withdrawals | A depositor requests a withdrawal | Keep enough of the deposit token idle for the next valuation to pay it |
+| Withdrawals | A withdrawal request is cancelled, paid or rejected | Nothing |
+| Withdrawals | Queued withdrawals, priced at the last NAV, exceed the vault's idle balance | Swap or close positions so idle funds cover the payout |
 
-Hedgin checks every 5 minutes and sends each alert once. If a problem is still open in the next 4-hour epoch, you get one reminder for that epoch.
+Each alert shows the amount, the depositor's address for a single request, and a button to open the vault console. Requests settled in the same transaction arrive as one alert.
+
+Hedgin checks every 5 minutes and sends each alert once. Activity older than 2 hours is not sent. If idle funds are still short in the next 4-hour epoch, you get one reminder for that epoch.
+
+Valuation problems and guardian pauses are not sent by Telegram or email. They show in the bell.
