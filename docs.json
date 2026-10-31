@@ -53,7 +53,8 @@
             "group": "Managers",
             "pages": [
               "managers/overview",
-              "managers/telegram-bot"
+              "managers/telegram-bot",
+              "managers/alerts"
             ]
           },
           {
