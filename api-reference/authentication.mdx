@@ -9,7 +9,9 @@ Every request needs an API key in the `Authorization` header:
 Authorization: Bearer hv1_<id>_<secret>
 ```
 
-Create the key yourself in the [manager console](https://hedgin.xyz/manage): open your vault, select **Connect AI**, pick what the key may do, and sign with the vault's manager wallet or a delegate wallet. The key is made in your browser and shown once; Hedgin stores only a fingerprint of it. A wallet you cannot connect to a browser, such as the [Telegram bot](/managers/telegram-bot)'s wallet, needs a key from a Hedgin administrator instead.
+Create the key yourself in the [manager console](https://hedgin.xyz/manage): open your vault, select **Connect AI**, pick what the key may do, and sign with the vault's manager wallet or a delegate wallet. The key is made in your browser and shown once; Hedgin stores only a fingerprint of it.
+
+If your bot signs with its own wallet that you cannot connect to a browser, add that wallet as a delegate under **Settings → Delegates**, then in **Connect AI** choose **Bot's own wallet**, pick it, and sign with the manager wallet. The key builds transactions only for the bot's wallet and stops working when you remove the delegate.
 
 Store the key in your bot's secret store. Keep it out of Git, logs, URLs, and browser code. Use the key exactly as issued. A missing, malformed, unknown, revoked, or expired key returns 401 with code `Unauthorized`.
 
