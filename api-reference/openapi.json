@@ -4717,6 +4717,7 @@
           "totalAssets",
           "navPerShare",
           "depositCap",
+          "minDeposit",
           "performanceFeeBps",
           "managementFeeBps",
           "lastNavTs",
@@ -4779,6 +4780,9 @@
             "description": "Last posted value of one share base unit in deposit base units, scaled by 10^9."
           },
           "depositCap": {
+            "$ref": "#/components/schemas/BaseUnitAmount"
+          },
+          "minDeposit": {
             "$ref": "#/components/schemas/BaseUnitAmount"
           },
           "performanceFeeBps": {
@@ -4965,9 +4969,6 @@
               "highWaterMark": {
                 "type": "string",
                 "description": "All-time highest NAV per share after fees, same scale as `navPerShare`."
-              },
-              "minDeposit": {
-                "$ref": "#/components/schemas/BaseUnitAmount"
               },
               "minWithdrawalShares": {
                 "$ref": "#/components/schemas/BaseUnitAmount"
