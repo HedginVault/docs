@@ -1,0 +1,159 @@
+---
+title: "Depositor SDK"
+description: "Deposit into and withdraw from Hedgin vaults from your own app, with no API key."
+---
+
+`HedgeVault` lets an app or script deposit into a vault and withdraw from it for its own wallet. It reads vaults from chain through your RPC connection and builds each transaction locally from the program's interface. It needs no API key and never calls a Hedgin server.
+
+Like Meteora's DLMM SDK, every action returns an unsigned `Transaction`. You sign and send it yourself, with a keypair or a wallet adapter. The SDK never holds a key.
+
+<Note>
+  `HedgeVault` is available from `@hedginxyz/sdk` 0.5.0.
+</Note>
+
+## Install
+
+<CodeGroup>
+
+```sh yarn
+yarn add @hedginxyz/sdk @solana/web3.js @coral-xyz/anchor
+```
+
+```sh npm
+npm install @hedginxyz/sdk @solana/web3.js @coral-xyz/anchor
+```
+
+</CodeGroup>
+
+`@coral-xyz/anchor` provides `BN`, the integer type for amounts.
+
+## Deposit and withdraw
+
+```ts
+import { Connection, Keypair, PublicKey, sendAndConfirmTransaction } from "@solana/web3.js";
+import { BN } from "@coral-xyz/anchor";
+import { HedgeVault } from "@hedginxyz/sdk";
+
+const connection = new Connection(process.env.RPC_URL!);
+const user = Keypair.fromSecretKey(/* your signer bytes */);
+
+// Load a vault.
+const vaults = await HedgeVault.getAll(connection);
+const vault = await HedgeVault.create(connection, new PublicKey(vaults[0].address));
+
+// Deposit 5 USDC. Amounts are BN in base units: USDC has 6 decimals.
+const depositTx = await vault.deposit({ user: user.publicKey, amount: new BN(5_000_000) });
+await sendAndConfirmTransaction(connection, depositTx, [user]);
+
+// After the next valuation, the deposit becomes shares in your wallet.
+const { shares, valueAtNav, depositRequest } = await vault.getPositionByUser(user.publicKey);
+
+// Withdraw every share in the wallet.
+const withdrawTx = await vault.withdraw({ user: user.publicKey, shares });
+await sendAndConfirmTransaction(connection, withdrawTx, [user]);
+```
+
+In a browser, send the same transaction with your wallet adapter:
+
+```ts
+const tx = await vault.deposit({ user: wallet.publicKey, amount });
+await wallet.sendTransaction(tx, connection);
+```
+
+## How a request settles
+
+A deposit or withdrawal is a request, not an instant swap. It waits for the next valuation, which happens every 4 hours, and then settles at that NAV (net asset value per share). See [Vaults and NAV](/concepts/vaults-and-nav).
+
+<Steps>
+  <Step title="Request">
+    `deposit` moves your tokens into the vault's holding account. `withdraw` moves your shares there. Nothing is invested or paid out yet.
+  </Step>
+  <Step title="Wait for the valuation">
+    `getPositionByUser` shows the request as `pending`. You can cancel it with `cancelDeposit` or `cancelWithdrawal` while it is pending.
+  </Step>
+  <Step title="Settlement">
+    After the valuation, Hedgin's keeper settles every resolvable request on its own. A deposit becomes shares in your wallet. A withdrawal pays out the deposit token, or native SOL for a SOL vault. You do not send anything for this step.
+  </Step>
+</Steps>
+
+A private vault also needs the manager to approve each request before it settles. Until then, `awaitingApproval` is `true` and the request stays cancellable.
+
+## Reads
+
+| Method | Returns |
+| --- | --- |
+| `HedgeVault.getAll(connection, options?)` | Every vault that takes deposits, sorted by id, as `VaultSummary[]`. `selection: true` means only the vault's manager can deposit. This uses `getProgramAccounts`, which some RPC providers restrict. |
+| `HedgeVault.create(connection, vault, options?)` | A loaded vault. `vault.state` holds its details: NAV per share, fees, minimum deposit, caps, and pause flags. Throws `ApiError` with code `NotFound` for an address that is not a Hedgin vault. |
+| `vault.refetchStates()` | Re-reads `vault.state`. |
+| `vault.getPositionByUser(user)` | Your position, in one RPC call. See below. |
+
+`getPositionByUser` returns:
+
+| Field | Meaning |
+| --- | --- |
+| `shares` | Shares in your wallet, as `BN` in share base units. Shares held by a pending withdrawal are in `withdrawalRequest.shares` instead. |
+| `valueAtNav` | `shares` valued at the last NAV, in deposit-token base units. |
+| `depositRequest` | Your open deposit (`amount`), or `null`. |
+| `withdrawalRequest` | Your open withdrawal (`shares`), or `null`. |
+
+Each open request has a `state`:
+
+| State | Meaning |
+| --- | --- |
+| `pending` | Waiting for the next valuation. Cancellable. |
+| `resolvable` | Valued. The keeper settles it shortly. |
+| `frozen` | A new 4-hour window started before its valuation was posted. It cannot be settled or cancelled until that valuation lands. |
+
+Each request also has `cancellable`, `awaitingApproval`, `epoch`, and `createdTs` (Unix seconds).
+
+## Actions
+
+Each action takes one object with `user`, the wallet that signs and pays, and returns a `Promise<Transaction>`.
+
+| Method | Params | What it does |
+| --- | --- | --- |
+| `deposit` | `user`, `amount` | Requests a deposit of `amount` deposit-token base units. For a SOL vault, the same transaction wraps the native SOL your wrapped SOL account is short of. |
+| `cancelDeposit` | `user` | Returns your pending deposit to your wallet. |
+| `withdraw` | `user`, `shares` | Requests a withdrawal of `shares` share base units. |
+| `cancelWithdrawal` | `user` | Returns your pending withdrawal's shares to your wallet. |
+
+Amounts are `BN` in base units, the token's smallest unit. For 5 USDC, which has 6 decimals, pass `new BN(5_000_000)`. Shares use the same number of decimals as the deposit token.
+
+## Options
+
+`getAll` and `create` take the same options:
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `maxPriorityFeeLamports` | `1_000_000n` (0.001 SOL) | The most a transaction may pay in priority fee. |
+| `jupiterApiKey` | none | Look up token symbols on `api.jup.ag` instead of the keyless `lite-api.jup.ag`. |
+| `fetch` | global `fetch` | The fetch used for token symbols. |
+| `programId` | the mainnet program | Point at a non-production deployment only. |
+
+## Errors
+
+Every transaction is simulated before it is returned, so a request the program would refuse throws instead of failing on chain. The `ApiError` carries the program's error name in `code`.
+
+| Code | Meaning |
+| --- | --- |
+| `DepositBelowMinimum` | The amount is below `vault.state.minDeposit`. |
+| `VaultInSelection` | The vault is in manager selection. Only its manager can deposit. |
+| `RequestNotFound` | You have no open request to cancel. |
+| `Validation` | The amount is not a positive `BN` that fits in 64 bits. |
+| `NotFound` | The address is not a Hedgin vault. |
+
+Program error names for other cases, such as a paused vault or a full deposit cap, come through the same way.
+
+## What the SDK checks before it returns a transaction
+
+A deposit moves your own funds, so the SDK refuses to return a transaction unless it does exactly what you asked. A refusal throws `UnsafeTransactionError`. The transaction must meet every rule:
+
+- `user` is the only signer and pays the fee.
+- It contains exactly one Hedgin vault instruction, of the kind you called, for this vault, your wallet, and your exact amount.
+- The priority fee is at or under `maxPriorityFeeLamports`.
+- It uses no address lookup tables, so every account it touches is visible to the check.
+- The only other instructions allowed are for a SOL deposit: create your own wrapped SOL account, move at most `amount` lamports into it, and sync it.
+
+The compute unit limit is set from the simulation, plus 20% headroom. The transaction carries `recentBlockhash` and `lastValidBlockHeight`, so send it promptly.
+
+For the manager client, see [Getting started](/sdk/getting-started).

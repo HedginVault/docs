@@ -5,6 +5,8 @@ description: "Automate Hedgin vaults with the TypeScript SDK."
 
 `@hedginxyz/sdk` lets TypeScript bots and scripts manage Hedgin vaults. It supports Jupiter swaps, Meteora DLMM liquidity and limit orders, Phoenix perpetuals, and vault management.
 
+Building for depositors instead? The [depositor SDK](/sdk/depositors) deposits and withdraws for a user's own wallet, with no API key.
+
 Use `execute` to run an action and receive its outcome. Your manager key stays in your process. The SDK checks transactions against its signing policy before requesting a signature.
 
 ## Start building
@@ -12,6 +14,7 @@ Use `execute` to run an action and receive its outcome. Your manager key stays i
 | Guide | Use it to |
 | --- | --- |
 | [Getting started](/sdk/getting-started) | Install the SDK, configure a signer, and run an action. |
+| [Depositor SDK](/sdk/depositors) | Deposit into and withdraw from a vault from your own app. |
 | [Examples](/sdk/examples) | Implement swaps, liquidity management, and perpetual trading. |
 | [Reference](/sdk/reference) | Look up methods, types, helpers, and errors. |
 | [Execution and safety](/sdk/safety) | Handle outcomes and understand signing restrictions. |
