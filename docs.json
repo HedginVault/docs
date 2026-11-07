@@ -198,6 +198,7 @@
             "group": "Build with TypeScript",
             "pages": [
               "sdk/getting-started",
+              "sdk/depositors",
               "sdk/examples",
               "sdk/reference"
             ]
