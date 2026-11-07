@@ -3,6 +3,12 @@ title: "Changelog"
 description: "Release notes for @hedginxyz/sdk."
 ---
 
+<Update label="0.5.0" description="November 7, 2026">
+  - Sends `User-Agent: hedginxyz-sdk/<version>` on every Manager API request, so Hedgin can see which SDK version each key runs.
+  - Prints one `console.warn` per client when the API's `x-hedge-sdk-latest` response header names a newer release, with the upgrade command. Nothing updates on its own.
+  - Adds `HedgeVault`, a depositor client that reads vaults and positions from chain and builds deposit and withdrawal requests locally. It needs no API key.
+</Update>
+
 <Update label="0.4.1" description="November 5, 2026">
   - The signing policy caps the total priority fee, not the price per compute unit. It refuses a transaction whose price × compute unit limit exceeds `maxPriorityFeeLamports`, which defaults to 0.001 SOL (`DEFAULT_MAX_PRIORITY_FEE_LAMPORTS`, the app's automatic-fee budget). A priced transaction with no compute unit limit counts as 1.4M CU.
   - Fixes refusals such as `Priority fee 102853 microLamports/CU is above the cap` on swaps whose total fee was well inside the budget.
