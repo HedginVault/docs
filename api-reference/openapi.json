@@ -3,7 +3,7 @@
   "info": {
     "title": "Hedgin manager bot API",
     "version": "1.0.0",
-    "description": "Versioned HTTP API for approved manager bots. Reads vault state and builds unsigned Solana transactions. The bot signs locally with the vault's current authority key. Runs only on Solana mainnet-beta."
+    "description": "Versioned HTTP API for approved manager bots. Reads vault state and builds unsigned Solana transactions. The bot signs locally with the vault's current authority key. Runs only on Solana mainnet-beta. Send `User-Agent: <client>/<version>`; the official SDK sends `hedginxyz-sdk/<version>`, which Hedgin records per key. Every response carries `x-hedge-sdk-latest`, the newest published `@hedginxyz/sdk` version."
   },
   "servers": [
     {
@@ -79,6 +79,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -145,6 +150,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -210,6 +220,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -279,6 +294,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -360,6 +380,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -425,6 +450,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -495,6 +525,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -560,6 +595,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -664,6 +704,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -756,6 +801,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -833,6 +883,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -926,6 +981,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -1007,6 +1067,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -1168,6 +1233,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -1267,6 +1337,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -1400,6 +1475,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -1541,6 +1621,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -1677,6 +1762,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -1812,6 +1902,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -1954,6 +2049,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -2102,6 +2202,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -2212,6 +2317,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -2319,6 +2429,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -2453,6 +2568,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -2581,6 +2701,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -2684,6 +2809,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -2864,6 +2994,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -2985,6 +3120,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -3074,6 +3214,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -3159,6 +3304,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -3255,6 +3405,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -3345,6 +3500,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -3547,6 +3707,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -3669,6 +3834,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -3798,6 +3968,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -3883,6 +4058,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -4030,6 +4210,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -4157,6 +4342,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -4243,6 +4433,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -4328,6 +4523,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -4418,6 +4618,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -4520,6 +4725,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -4614,6 +4824,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -4716,6 +4931,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -4810,6 +5030,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -4911,6 +5136,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -5017,6 +5247,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -5121,6 +5356,11 @@
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -5233,6 +5473,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -5333,6 +5578,11 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -5402,6 +5652,11 @@
                   "$ref": "#/components/schemas/SendResponse"
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -5465,6 +5720,11 @@
                   "$ref": "#/components/schemas/SendResponse"
                 }
               }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
+              }
             }
           },
           "400": {
@@ -5524,6 +5784,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/TransactionStatus"
                 }
+              }
+            },
+            "headers": {
+              "x-hedge-sdk-latest": {
+                "$ref": "#/components/headers/XHedgeSdkLatest"
               }
             }
           },
@@ -7669,6 +7934,11 @@
               }
             }
           }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
+          }
         }
       },
       "Unauthorized": {
@@ -7684,6 +7954,11 @@
                 "message": "Invalid API key"
               }
             }
+          }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
           }
         }
       },
@@ -7701,6 +7976,11 @@
               }
             }
           }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
+          }
         }
       },
       "NotFound": {
@@ -7716,6 +7996,11 @@
                 "message": "Vault not found"
               }
             }
+          }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
           }
         }
       },
@@ -7733,6 +8018,11 @@
               }
             }
           }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
+          }
         }
       },
       "PayloadTooLarge": {
@@ -7748,6 +8038,11 @@
                 "message": "Request body is too large"
               }
             }
+          }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
           }
         }
       },
@@ -7765,6 +8060,11 @@
               }
             }
           }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
+          }
         }
       },
       "TooManyRequests": {
@@ -7780,6 +8080,11 @@
                 "message": "Too many requests, slow down"
               }
             }
+          }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
           }
         }
       },
@@ -7797,6 +8102,11 @@
               }
             }
           }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
+          }
         }
       },
       "BadGateway": {
@@ -7812,6 +8122,11 @@
                 "message": "Service temporarily unavailable"
               }
             }
+          }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
           }
         }
       },
@@ -7829,6 +8144,23 @@
               }
             }
           }
+        },
+        "headers": {
+          "x-hedge-sdk-latest": {
+            "$ref": "#/components/headers/XHedgeSdkLatest"
+          }
+        }
+      }
+    },
+    "headers": {
+      "XHedgeSdkLatest": {
+        "description": "Newest published `@hedginxyz/sdk` version. SDK 0.5.0 and later print one warning per client when this is newer than the installed version.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "examples": [
+            "0.5.0"
+          ]
         }
       }
     }
