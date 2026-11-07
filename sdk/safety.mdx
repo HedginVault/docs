@@ -167,13 +167,13 @@ The API builds every transaction. The SDK does not trust that. It inspects the w
 | Fee payer | The signer's key | The signer's key |
 | Other signatures | Every other required signature already present, such as the new keypair of a DLMM position | One missing: Phoenix signs after the manager |
 | Top-level programs | Hedge Vault, ComputeBudget, Associated Token Account, Meteora DLMM, Jupiter | Phoenix only (`EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih`) |
-| Priority fee | At or below 100,000 microLamports per compute unit | None. ComputeBudget is refused. |
+| Priority fee | Price × compute unit limit at or below 0.001 SOL. A missing limit counts as 1.4M CU. | None. ComputeBudget is refused. |
 | Shape of the build | Any number of steps and `next` continuations | One non-empty transaction, no `next` |
 | Checked by | `inspectTransaction` | `inspectPhoenixOnboardTransaction` |
 
 Token movement happens by cross-program invocation inside the Hedge Vault program, so none of the allowed top-level programs can transfer funds out of the manager wallet. The manager pays only rent (for example, associated token accounts and DLMM bin arrays) and the capped priority fee.
 
-Change the cap with `maxComputeUnitPriceMicroLamports` in the [client options](/sdk/reference#createhedgeclient). Change the allowed program with `programId` only for a non-production deployment.
+The 0.001 SOL cap matches the app's automatic-fee budget. The app never prices a transaction above it, so normal builds always pass. Change the cap with `maxPriorityFeeLamports` in the [client options](/sdk/reference#createhedgeclient). Set `maxComputeUnitPriceMicroLamports` to also cap the price per compute unit. Change the allowed program with `programId` only for a non-production deployment.
 
 Use `inspectTransaction` directly to check a transaction yourself:
 
@@ -181,7 +181,7 @@ Use `inspectTransaction` directly to check a transaction yourself:
 const policy: SigningPolicy = {
   manager,
   programId: HEDGE_VAULT_PROGRAM_ID,
-  maxComputeUnitPriceMicroLamports: DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS,
+  maxPriorityFeeLamports: DEFAULT_MAX_PRIORITY_FEE_LAMPORTS,
 };
 try {
   inspectTransaction(base64Transaction, policy);

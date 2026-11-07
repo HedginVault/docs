@@ -26,7 +26,8 @@ Node 18 or later. The package is CommonJS.
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
-| `DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS` | `100_000n` | The highest priority fee the SDK signs by default, in microLamports per compute unit. |
+| `DEFAULT_MAX_PRIORITY_FEE_LAMPORTS` | `1_000_000n` | The highest total priority fee the SDK signs by default: 0.001 SOL per transaction, the app's automatic-fee budget. |
+| `DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS` | `500_000n` | The app's highest price per compute unit. Pass it as `maxComputeUnitPriceMicroLamports` to also cap the price. Not applied by default. |
 | `DLMM_BINS_PER_TRANSACTION` | `70` | Bins one position account holds. A wider open becomes several transactions. |
 | `DLMM_MAX_POSITION_BINS` | `1_400` | The widest position range the SDK and app accept. |
 
@@ -64,6 +65,7 @@ type Outcome =
 
 interface Created {
   vault?: string; // from vault/initialize
+  child?: string; // from escrow/create
   position?: string; // from dlmm/initialize or dlmm/open
 }
 ```
@@ -111,13 +113,14 @@ Returns a `HedgeClient` bound to one API key. The client sends the key as a bear
 | `apiKey` | `string` | Required | The `hv1_<id>_<secret>` manager key. |
 | `baseUrl` | `string` | `https://hedgin.xyz` | The site origin. A URL ending in `/api/external/v1` also works. |
 | `programId` | `string` | `HEDGE_VAULT_PROGRAM_ID` | The Hedge Vault program the signing policy allows. Override only for a non-production deployment. |
-| `maxComputeUnitPriceMicroLamports` | `bigint` | `100_000n` | The highest priority fee the SDK signs. |
+| `maxPriorityFeeLamports` | `bigint` | `1_000_000n` | The highest priority fee the SDK signs, as price × compute unit limit in lamports. |
+| `maxComputeUnitPriceMicroLamports` | `bigint` | Unset | Also refuse a price per compute unit above this. |
 | `fetch` | `typeof fetch` | Global `fetch` | A replacement `fetch`, for tests or a proxy. |
 
 ```ts
 const hedge = createHedgeClient({
   apiKey: process.env.HEDGE_API_KEY ?? "",
-  maxComputeUnitPriceMicroLamports: 50_000n,
+  maxPriorityFeeLamports: 500_000n, // 0.0005 SOL
 });
 ```
 
@@ -133,7 +136,7 @@ Every read needs the `read` scope. Each method parses the response against the S
 listVaults(): Promise<VaultSummary[]>
 ```
 
-The vaults this key manages, from `GET /vaults`. Each `VaultSummary` has `address`, `name`, `status`, `depositMint`, `depositSymbol`, `depositDecimals`, and `totalAssets`, so you can format amounts without another request.
+The vaults this key manages, from `GET /vaults`. Each `VaultSummary` has `address`, `name`, `status`, `depositMint`, `depositSymbol`, `depositDecimals`, and `totalAssets`, so you can format amounts without another request. Newer servers also send `approvalRequired`, `parent` (the parent vault of a child vault, else `null`), and `childCount`. Child vaults are not in this list.
 
 ### `getVault`
 
@@ -141,7 +144,7 @@ The vaults this key manages, from `GET /vaults`. Each `VaultSummary` has `addres
 getVault(vault: string): Promise<VaultDetail>
 ```
 
-The on-chain vault state, from `GET /vaults/{vault}`: fees, limits, pending requests, pause flags, and the NAV epoch. `navPerShare` is scaled by 1e9. `protocol.maxSlippageBps` is the protocol-wide slippage cap.
+The on-chain vault state, from `GET /vaults/{vault}`: fees, limits, pending requests, pause flags, and the NAV epoch. `navPerShare` is scaled by 1e9. `protocol.maxSlippageBps` is the protocol-wide slippage cap. `shareSymbol` is the share token's symbol, `null` until its metadata exists.
 
 ### `getHoldings`
 
@@ -183,7 +186,7 @@ Posted NAVs, oldest first, from `GET /vaults/{vault}/nav`. The API returns the l
 getRequests(vault: string): Promise<RequestQueue>
 ```
 
-Queued `deposits` and `withdrawals`, from `GET /vaults/{vault}/requests`. A request is `pending` until a later NAV epoch is posted, then `resolvable`. Deposit `amount` is in deposit-mint base units. Withdrawal `shares` is in share base units.
+Queued `deposits` and `withdrawals`, from `GET /vaults/{vault}/requests`. A request is `pending` until a later NAV epoch is posted, then `resolvable`. It is `frozen` when a newer epoch starts before that NAV lands: neither claimable nor cancellable until the NAV is posted. On a vault with `approvalRequired`, `awaitingApproval` is `true` until the manager approves the request's current amount. It cannot settle until then and stays cancellable. Deposit `amount` is in deposit-mint base units. Withdrawal `shares` is in share base units.
 
 ### `getStrategyHistory`
 
@@ -290,7 +293,7 @@ The low-level calls `execute` is made of. `build` does not inspect or sign. Pref
 | Action | Fields | Notes |
 | --- | --- | --- |
 | `jupiter/initialize` | `vault, targetMint` | Opens the strategy the vault needs before it can hold `targetMint`. |
-| `jupiter/swap` | `vault, sourceMint, destinationMint, amount, slippageBps` | `amount` is in source-mint base units. |
+| `jupiter/swap` | `vault, sourceMint, destinationMint, amount, slippageBps`, optional `minOutAmount` | `amount` is in source-mint base units. `minOutAmount` is the least `destinationMint` you accept, from the quote you approved. A fresh quote below it fails with `QuoteMoved`. |
 | `jupiter/sweep` | `vault, mint, slippageBps` | One transaction. Sells the vault's whole `mint` balance to the deposit mint, then closes that mint's strategy. HTTP 409 while an open DLMM position or limit order uses `mint`. |
 
 ### Meteora DLMM
@@ -300,10 +303,10 @@ The low-level calls `execute` is made of. `build` does not inspect or sign. Pref
 | `dlmm/initialize` | `vault, lbPair`, and either `width` or `lowerBinId` + `upperBinId` | Creates an empty position and any missing pair-token Jupiter strategies. `width` is 1 to 70 bins centred on the active bin. `upperBinId` is exclusive, at most 70 above `lowerBinId`. Returns `created.position`. |
 | `dlmm/open` | `vault, lbPair, lowerBinId, upperBinId, amountX, amountY, shape, maxActiveBinSlippage` | `upperBinId` is exclusive. A range wider than 70 bins continues through `dlmm/extend`. |
 | `dlmm/add` | `vault, position, amountX, amountY, shape, maxActiveBinSlippage`, optional `lowerBinId` + `upperBinId` | The optional range is inclusive and inside the position. With it, adds only to those bins. |
-| `dlmm/remove` | `vault, position, bpsToRemove`, optional `cursorBinId`, optional `lowerBinId` + `upperBinId` | Removes `bpsToRemove` (1 to 10000) of liquidity, only from the range when given. |
+| `dlmm/remove` | `vault, position, bpsToRemove`, optional `cursorBinId`, optional `lowerBinId` + `upperBinId`, optional zap fields | Removes `bpsToRemove` (1 to 10000) of liquidity, only from the range when given. With `slippageBps` it zaps in the same transaction. The other pool token is swapped into `outputMint`. Zap fields as in `dlmm/zap-out`. |
 | `dlmm/flip` | `vault, position, lowerBinId, upperBinId, activeBinId, maxActiveBinSlippage` | One atomic transaction. Removes all liquidity from the inclusive range and re-adds that token as Bid-Ask. The range must lie strictly above (token X) or below (token Y) `activeBinId`. Does not claim fees. |
 | `dlmm/claim-fee` | `vault, position`, optional `cursorBinId` | Claims the position's fees. |
-| `dlmm/zap-out` | `vault, position, slippageBps`, optional `cursorBinId` | Removes everything. When eligible, continues to `jupiter/sweep` for the leftover non-deposit token. |
+| `dlmm/zap-out` | `vault, position, slippageBps`, optional `cursorBinId, outputMint, minOut, followUpMinOut, separateSwap` | Removes everything. `outputMint` is a pool token or the deposit mint, the default. `minOut` and `followUpMinOut` are `{ inAmount, minOutAmount }` price floors for the zap swap and for the follow-up into the deposit mint. `separateSwap` withdraws first and swaps in a transaction of its own. When eligible, continues to `jupiter/sweep` for the leftover non-deposit token. |
 | `dlmm/close` | `vault, position` | Removes everything, claims fees, and closes the position and its strategy. |
 | `dlmm/limit-order/place` | `vault, lbPair, side, bins` | `side` is `"ask"` (sells X above the active bin) or `"bid"` (sells Y below it). `bins` is 1 to 50 `{ binId, amount }` in strictly increasing `binId`, each amount above zero in the sold token. Opens missing pair-token Jupiter strategies first, so the build may hold two transactions. |
 | `dlmm/limit-order/cancel` | `vault, limitOrder`, optional `bins` | Cancels the listed bin ids, or every bin still holding anything. Pays unfilled amounts, proceeds, and fees back to the vault. Closes the strategy once the order is empty. |
@@ -339,12 +342,39 @@ The low-level calls `execute` is made of. `build` does not inspect or sign. Pref
 
 | Action | Fields | Notes |
 | --- | --- | --- |
-| `vault/initialize` | `name, depositMint, performanceFeeBps, managementFeeBps, depositCap, minDeposit, minWithdrawalShares` | Takes no `vault`. Needs a key not limited to specific vaults. Returns `created.vault`. |
-| `vault/update` | `vault` and at least one of `performanceFeeBps, managementFeeBps, depositCap, minDeposit, minWithdrawalShares, status, depositPaused, withdrawalPaused` | Changes only the fields you give. |
+| `vault/initialize` | `name, depositMint, performanceFeeBps, managementFeeBps, depositCap, minDeposit, minWithdrawalShares`, optional `approvalRequired` | Takes no `vault`. Needs a key not limited to specific vaults. Returns `created.vault`. |
+| `vault/update` | `vault` and at least one of `performanceFeeBps, managementFeeBps, depositCap, minDeposit, minWithdrawalShares, status, depositPaused, withdrawalPaused, approvalRequired` | Changes only the fields you give. |
 | `vault/claim-fee` | `vault` | Mints the manager's accrued fee shares to the manager. |
 | `vault/close` | `vault` | Closes the vault. |
 
-`name` is at most 32 UTF-8 bytes. Fees are basis points from 0 to 10000. `depositCap` and `minDeposit` are deposit-mint base units. `minWithdrawalShares` is share base units. `status` is a `VaultStatus`.
+`name` is at most 32 UTF-8 bytes. Fees are basis points from 0 to 10000. `depositCap` and `minDeposit` are deposit-mint base units. `minWithdrawalShares` is share base units. `status` is a `VaultStatus`. With `approvalRequired`, deposits and withdrawals wait for the manager to approve each one.
+
+### Request approval
+
+On a vault with `approvalRequired`, the vault authority approves or rejects each queued request. Read the queue with [`getRequests`](#getrequests) first.
+
+| Action | Fields | Notes |
+| --- | --- | --- |
+| `deposit/approve` | `vault, depositor, amount` | Lets the pending deposit settle. `amount` is the amount you reviewed, in deposit-mint base units. The program refuses with `ApprovedAmountMismatch` if the request changed since. |
+| `withdrawal/approve` | `vault, withdrawer, shares` | The same for a withdrawal, with the reviewed share base units. |
+| `deposit/reject` | `vault, depositor` | Refunds the pending deposit and closes the request. |
+| `withdrawal/reject` | `vault, withdrawer` | Returns the pending withdrawal's shares and closes the request. |
+
+All four need the vault authority's key.
+
+### Child vaults
+
+A child vault belongs to a vault that takes deposits. It has the same authority and deposit mint and no depositors of its own. Use it to hold part of the capital apart, for example for one strategy.
+
+| Action | Fields | Notes |
+| --- | --- | --- |
+| `escrow/create` | `vault, name`, optional `fundAmount` | Authority only. `name` is at most 32 UTF-8 bytes. `fundAmount` (deposit-mint base units) funds the child in the same transaction. Returns `created.child`. |
+| `escrow/fund` | `vault, child, amount`, optional `mint` | Moves `amount` from `vault` into `child`. The authority or any live delegate may run it. |
+| `escrow/defund` | `vault, child, amount`, optional `mint` | Moves `amount` from `child` back into `vault`. Same rules as `escrow/fund`. |
+| `escrow/transfer` | `vault, source, destination, amount`, optional `mint` | Moves `amount` between any two vaults of the family: `vault` or its children. |
+| `escrow/close` | `vault, child`, optional `defundFirst` | Authority only. `defundFirst` returns every token and closes the child's Jupiter strategies in the same transaction. Close its LP positions, limit orders, and Phoenix account first. |
+
+`mint` defaults to the deposit mint. Another mint must be tracked by the sending vault. The receiving vault's Jupiter strategy is created first when it is missing.
 
 ### Continuations
 
@@ -397,17 +427,18 @@ function inspectTransaction(base64: string, policy: SigningPolicy): VersionedTra
 interface SigningPolicy {
   manager: PublicKey;
   programId: string;
-  maxComputeUnitPriceMicroLamports: bigint;
+  maxPriorityFeeLamports: bigint; // price × compute unit limit, rounded up to lamports
+  maxComputeUnitPriceMicroLamports?: bigint; // optional extra cap on the price alone
 }
 ```
 
-Checks one unsigned base64 transaction against the [signing policy](/sdk/safety#signing-policy) and returns it decoded. Throws `UnsafeTransactionError` when it is not v0, is not paid by `manager`, lacks a required co-signature, calls a program outside the allowed set at the top level, or sets a priority fee above the cap.
+Checks one unsigned base64 transaction against the [signing policy](/sdk/safety#signing-policy) and returns it decoded. Throws `UnsafeTransactionError` when it is not v0, is not paid by `manager`, lacks a required co-signature, calls a program outside the allowed set at the top level, or sets a priority fee above the cap. A priced transaction with no compute unit limit is read at the 1.4M CU maximum, so a missing limit cannot hide a fee.
 
 ```ts
 const policy: SigningPolicy = {
   manager: signer.publicKey,
   programId: HEDGE_VAULT_PROGRAM_ID,
-  maxComputeUnitPriceMicroLamports: DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS,
+  maxPriorityFeeLamports: DEFAULT_MAX_PRIORITY_FEE_LAMPORTS,
 };
 for (const step of await hedge.build("jupiter/swap", body)) inspectTransaction(step.transaction, policy);
 ```

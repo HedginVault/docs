@@ -3,6 +3,19 @@ title: "Changelog"
 description: "Release notes for @hedginxyz/sdk."
 ---
 
+<Update label="0.4.1" description="November 5, 2026">
+  - The signing policy caps the total priority fee, not the price per compute unit. It refuses a transaction whose price × compute unit limit exceeds `maxPriorityFeeLamports`, which defaults to 0.001 SOL (`DEFAULT_MAX_PRIORITY_FEE_LAMPORTS`, the app's automatic-fee budget). A priced transaction with no compute unit limit counts as 1.4M CU.
+  - Fixes refusals such as `Priority fee 102853 microLamports/CU is above the cap` on swaps whose total fee was well inside the budget.
+  - `maxComputeUnitPriceMicroLamports` is now an optional extra cap, unset by default. `DEFAULT_MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS` rises to `500_000n`.
+</Update>
+
+<Update label="0.4.0" description="November 3, 2026">
+  - Adds request approval: `approvalRequired` on `vault/initialize` and `vault/update`, and the `deposit/approve`, `withdrawal/approve`, `deposit/reject`, and `withdrawal/reject` actions.
+  - Adds child vaults: `escrow/create`, `escrow/fund`, `escrow/defund`, `escrow/transfer`, and `escrow/close`. A confirmed `escrow/create` reports the new child as `created.child`.
+  - Adds `minOutAmount` to `jupiter/swap`, and `outputMint`, `minOut`, `followUpMinOut`, and `separateSwap` to `dlmm/zap-out`. `dlmm/remove` zaps when given `slippageBps`.
+  - Vault summaries carry optional `approvalRequired`, `parent`, and `childCount`. Vault detail carries `shareSymbol`. Requests carry `awaitingApproval` and a new `frozen` state.
+</Update>
+
 <Update label="0.3.0" description="October 28, 2026">
   - Adds optional `outputMint` to `dlmm/zap-out` so you can receive either pool token. It defaults to the vault's deposit token.
   - Fixes signing for Jupiter swaps that require Pump.fun AMM account setup. The manager pays the account's rent.
