@@ -36,6 +36,9 @@
       "name": "Vault and strategy transactions"
     },
     {
+      "name": "Child vault transactions"
+    },
+    {
       "name": "Send and status"
     }
   ],
@@ -47,7 +50,7 @@
         ],
         "operationId": "listVaults",
         "summary": "List vaults",
-        "description": "Requires key scope `read`.\n\nReturns the vaults whose on-chain authority is the key's manager, filtered to the key's vault allowlist when it has one. The list can be up to 15 seconds old.",
+        "description": "Requires key scope `read`.\n\nReturns the vaults whose on-chain authority is the key's manager, then the vaults it holds a live delegation for, filtered to the key's vault allowlist when it has one. `children` lists the child vaults of those vaults. The list can be up to 15 seconds old.",
         "responses": {
           "200": {
             "description": "Vaults in scope.",
@@ -56,11 +59,19 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "vaults"
+                    "vaults",
+                    "children"
                   ],
                   "properties": {
                     "vaults": {
                       "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultSummary"
+                      }
+                    },
+                    "children": {
+                      "type": "array",
+                      "description": "Child vaults of the listed vaults.",
                       "items": {
                         "$ref": "#/components/schemas/VaultSummary"
                       }
@@ -1074,6 +1085,10 @@
                   },
                   "slippageBps": {
                     "$ref": "#/components/schemas/SlippageBps"
+                  },
+                  "minOutAmount": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "Least `destinationMint` base units the swap may return, from the quote you approved for `amount`. When a fresh quote is below it, the build returns 409 `QuoteMoved`. Omit it to bound the swap by `slippageBps` only."
                   }
                 }
               },
@@ -1985,7 +2000,7 @@
         ],
         "operationId": "build_dlmm_remove",
         "summary": "Remove liquidity",
-        "description": "Requires key scope `dlmm/remove`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one.\n\nRemoves `bpsToRemove` of the liquidity in the position or in an inclusive sub-range. A position of up to 70 bins without `cursorBinId` returns one step. Otherwise the build returns a batch of `sendConcurrently` steps from `cursorBinId` upward. When the pair's Jupiter strategies are missing, a setup barrier step comes first.",
+        "description": "Requires key scope `dlmm/remove`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one.\n\nRemoves `bpsToRemove` of the liquidity in the position or in an inclusive sub-range. A position of up to 70 bins without `cursorBinId` returns one step. Otherwise the build returns a batch of `sendConcurrently` steps from `cursorBinId` upward. When the pair's Jupiter strategies are missing, a setup barrier step comes first. With `slippageBps` the removal zaps like `dlmm/zap-out` but keeps the position open. When the zap ends in the deposit mint of a pool without it, or with `separateSwap`, the last step carries `next` to `dlmm/zap-out/swap`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2022,6 +2037,26 @@
                   "upperBinId": {
                     "type": "integer",
                     "description": "Inclusive last bin of a sub-range. Must lie inside the position."
+                  },
+                  "slippageBps": {
+                    "$ref": "#/components/schemas/SlippageBps",
+                    "description": "Set it to zap: each chunk swaps the removed non-deposit token into `outputMint` in the same transaction. Capped at the protocol's `maxSlippageBps`."
+                  },
+                  "outputMint": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "With `slippageBps`: token to end in. Defaults to the vault deposit mint. Must be one of the pool's two mints or the deposit mint."
+                  },
+                  "minOut": {
+                    "$ref": "#/components/schemas/MinOut",
+                    "description": "With `slippageBps`: floor of the zap swap."
+                  },
+                  "followUpMinOut": {
+                    "$ref": "#/components/schemas/MinOut",
+                    "description": "With `slippageBps`: floor of the follow-up `dlmm/zap-out/swap` into the deposit mint, for a pool without it."
+                  },
+                  "separateSwap": {
+                    "type": "boolean",
+                    "description": "With `slippageBps`: withdraw first and swap the returned non-deposit token after, in a `dlmm/zap-out/swap` step of its own, under `minOut`."
                   }
                 }
               },
@@ -2361,6 +2396,18 @@
                   "outputMint": {
                     "$ref": "#/components/schemas/PublicKey",
                     "description": "Token to end in. Defaults to the vault deposit mint. Must be one of the pool's two mints or the deposit mint."
+                  },
+                  "minOut": {
+                    "$ref": "#/components/schemas/MinOut",
+                    "description": "Floor of the zap swap."
+                  },
+                  "followUpMinOut": {
+                    "$ref": "#/components/schemas/MinOut",
+                    "description": "Floor of the follow-up `dlmm/zap-out/swap` into the deposit mint, for a pool without it."
+                  },
+                  "separateSwap": {
+                    "type": "boolean",
+                    "description": "Withdraw first and swap the returned non-deposit token after, in a `dlmm/zap-out/swap` step of its own, under `minOut`."
                   }
                 }
               },
@@ -2489,12 +2536,24 @@
                         },
                         "closeWhenEmpty": {
                           "type": "boolean"
+                        },
+                        "minOut": {
+                          "$ref": "#/components/schemas/MinOut",
+                          "description": "Floor of this source's swap."
+                        },
+                        "outputMint": {
+                          "$ref": "#/components/schemas/PublicKey",
+                          "description": "Token to swap into. Defaults to the vault deposit mint."
                         }
                       }
                     }
                   },
                   "slippageBps": {
                     "$ref": "#/components/schemas/SlippageBps"
+                  },
+                  "sweepAfter": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Sells the vault's whole balance of this mint once every source is swapped."
                   }
                 }
               }
@@ -3414,6 +3473,42 @@
                         }
                       }
                     ]
+                  },
+                  "disarmTpSl": {
+                    "type": "boolean",
+                    "description": "On a full close, also cancel the market's armed TP/SL, which would otherwise stay armed for the next position."
+                  },
+                  "tpSl": {
+                    "type": "object",
+                    "description": "Arms a TP/SL on the whole resulting position in the same transaction, replacing the market's armed one. Only a market order that is not `reduceOnly` can carry it, and not together with `disarmTpSl`. Set at least one leg. Same rules as `phoenix/tpsl`.",
+                    "required": [
+                      "takeProfit",
+                      "stopLoss"
+                    ],
+                    "properties": {
+                      "takeProfit": {
+                        "oneOf": [
+                          {
+                            "$ref": "#/components/schemas/DecimalString"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "USD per whole asset unit. `null` removes this leg. Must be above the mark price for a long's take profit or a short's stop loss, and below it for the other two."
+                      },
+                      "stopLoss": {
+                        "oneOf": [
+                          {
+                            "$ref": "#/components/schemas/DecimalString"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "USD per whole asset unit. `null` removes this leg. Must be above the mark price for a long's take profit or a short's stop loss, and below it for the other two."
+                      }
+                    }
                   }
                 }
               },
@@ -3427,6 +3522,129 @@
                   "type": "market",
                   "slippageBps": 50
                 }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/phoenix/tpsl": {
+      "post": {
+        "tags": [
+          "Phoenix transactions"
+        ],
+        "operationId": "build_phoenix_tpsl",
+        "summary": "Set Phoenix TP/SL",
+        "description": "Requires key scope `phoenix/tpsl`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority or a live delegate of it, and the vault must be in the key's allowlist when the key has one. A delegate needs the Phoenix permission.\n\nMakes the market's take-profit and stop-loss bracket on the vault's whole open position exactly what the body says. The build cancels every armed TP/SL of the market, then places the new one, so a retry converges. The first TP/SL also creates the trader's conditional-orders account in the same transaction. Both `null` removes the bracket. The trigger fills as a market order with 2% slippage. Returns 400 for an unknown market, when placing without an open position, when removing with nothing armed, or when a price is below one tick or on the wrong side of the mark.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "symbol",
+                  "takeProfit",
+                  "stopLoss"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Vault the transaction acts on."
+                  },
+                  "symbol": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "description": "Market symbol from `GET /vaults/{vault}/phoenix`."
+                  },
+                  "takeProfit": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DecimalString"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "USD per whole asset unit. `null` removes this leg. Must be above the mark price for a long's take profit or a short's stop loss, and below it for the other two."
+                  },
+                  "stopLoss": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DecimalString"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "USD per whole asset unit. `null` removes this leg. Must be above the mark price for a long's take profit or a short's stop loss, and below it for the other two."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "symbol": "SOL",
+                "takeProfit": "250",
+                "stopLoss": "150"
               }
             }
           }
@@ -3711,7 +3929,7 @@
         ],
         "operationId": "build_vault_initialize",
         "summary": "Create vault",
-        "description": "Requires key scope `vault/initialize`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored.\n\nCreates a vault managed by the key's manager. The body has no `vault`. The key must have no vault allowlist (403 otherwise), and the manager must be whitelisted on chain (403 otherwise). The step's `vault` field and the response's top-level `vault` name the new vault. That address comes from the protocol's next vault id, so a vault that someone else creates first makes this transaction fail. Build again in that case.",
+        "description": "Requires key scope `vault/initialize`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored.\n\nCreates a vault managed by the key's manager. The body has no `vault`. The key must have no vault allowlist (403 otherwise), and the manager must be whitelisted on chain (403 otherwise). The step's `vault` field and the response's top-level `vault` name the new vault. That address comes from the protocol's next vault id, so a vault that someone else creates first makes this transaction fail. Build again in that case. During selection a candidate manager can run one vault; another returns 409 `CandidateVaultLimit`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3757,6 +3975,10 @@
                   "minWithdrawalShares": {
                     "$ref": "#/components/schemas/BaseUnitAmount",
                     "description": "Share base units."
+                  },
+                  "approvalRequired": {
+                    "type": "boolean",
+                    "description": "Create the vault with approval required: deposits and withdrawals settle only after the manager approves each one. The setting rides in the same transaction."
                   }
                 }
               },
@@ -3895,6 +4117,15 @@
                   },
                   "withdrawalPaused": {
                     "type": "boolean"
+                  },
+                  "approvalRequired": {
+                    "type": "boolean",
+                    "description": "Deposits and withdrawals settle only after the manager approves each one with `deposit/approve` or `withdrawal/approve`."
+                  },
+                  "goLive": {
+                    "type": "boolean",
+                    "const": true,
+                    "description": "Opens a selection vault to public deposits, after any other change in the same transaction. The manager must have been promoted."
                   }
                 }
               },
@@ -4163,6 +4394,920 @@
                     "$ref": "#/components/schemas/PublicKey"
                   }
                 }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/deposit/approve": {
+      "post": {
+        "tags": [
+          "Vault and strategy transactions"
+        ],
+        "operationId": "build_deposit_approve",
+        "summary": "Approve deposit request",
+        "description": "Requires key scope `deposit/approve`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one. A delegate wallet gets 403.\n\nOn a vault with `approvalRequired`, lets `depositor`'s pending deposit settle at the next NAV post. Send the `amount` you reviewed. If the depositor changed the request since, the program rejects the transaction with `ApprovedAmountMismatch`; read the request again and approve the new amount. A top-up clears an earlier approval. Approval does not bypass vault status or pause flags, which still apply when the request settles. Read pending requests from `GET /vaults/{vault}/requests`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "depositor",
+                  "amount"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Vault the transaction acts on."
+                  },
+                  "depositor": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Owner of the deposit request."
+                  },
+                  "amount": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "The request's current amount, deposit-token base units."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "depositor": "DEPOSITOR_PUBLIC_KEY",
+                "amount": "1000000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/deposit/reject": {
+      "post": {
+        "tags": [
+          "Vault and strategy transactions"
+        ],
+        "operationId": "build_deposit_reject",
+        "summary": "Reject deposit request",
+        "description": "Requires key scope `deposit/reject`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one. A delegate wallet gets 403.\n\nRefunds `depositor`'s pending deposit to their token account and closes the request. The depositor gets the request's rent. Works until the request settles, including while the vault or protocol is paused. Read pending requests from `GET /vaults/{vault}/requests`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "depositor"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Vault the transaction acts on."
+                  },
+                  "depositor": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Owner of the deposit request."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "depositor": "DEPOSITOR_PUBLIC_KEY"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/withdrawal/approve": {
+      "post": {
+        "tags": [
+          "Vault and strategy transactions"
+        ],
+        "operationId": "build_withdrawal_approve",
+        "summary": "Approve withdrawal request",
+        "description": "Requires key scope `withdrawal/approve`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one. A delegate wallet gets 403.\n\nOn a vault with `approvalRequired`, lets `withdrawer`'s pending withdrawal settle at the next NAV post. Send the `shares` you reviewed. If the withdrawer changed the request since, the program rejects the transaction with `ApprovedAmountMismatch`; read the request again and approve the new amount. Approval does not bypass vault status or pause flags, which still apply when the request settles. Read pending requests from `GET /vaults/{vault}/requests`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "withdrawer",
+                  "shares"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Vault the transaction acts on."
+                  },
+                  "withdrawer": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Owner of the withdrawal request."
+                  },
+                  "shares": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "The request's current shares, share base units."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "withdrawer": "WITHDRAWER_PUBLIC_KEY",
+                "shares": "1000000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/withdrawal/reject": {
+      "post": {
+        "tags": [
+          "Vault and strategy transactions"
+        ],
+        "operationId": "build_withdrawal_reject",
+        "summary": "Reject withdrawal request",
+        "description": "Requires key scope `withdrawal/reject`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one. A delegate wallet gets 403.\n\nReturns `withdrawer`'s escrowed shares to their share account and closes the request. The withdrawer gets the request's rent. Works until the request settles, including while the vault or protocol is paused. Read pending requests from `GET /vaults/{vault}/requests`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "withdrawer"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Vault the transaction acts on."
+                  },
+                  "withdrawer": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Owner of the withdrawal request."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "withdrawer": "WITHDRAWER_PUBLIC_KEY"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/escrow/create": {
+      "post": {
+        "tags": [
+          "Child vault transactions"
+        ],
+        "operationId": "build_escrow_create",
+        "summary": "Create child vault",
+        "description": "Requires key scope `escrow/create`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one. A delegate wallet gets 403.\n\nChild vaults hold part of a parent vault's capital in a separate account for a separate set of strategies. They share the parent's authority and deposit mint, take no deposits and have no share mint. The keeper values them as part of the parent, so moving funds inside a family leaves NAV unchanged. Creates a child vault of `vault`. With `fundAmount`, the same transaction moves that many deposit-token base units from `vault` into it. Returns 400 when `vault` is itself a child vault or already has 16 child vaults. The child's address comes from the protocol's next vault id, so a vault that someone else creates first makes this transaction fail. Build again in that case.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "name"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "The parent vault, a vault that takes deposits. A key whose allowlist names it also reaches its child vaults."
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "At most 32 UTF-8 bytes."
+                  },
+                  "fundAmount": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "Optional first funding, deposit-token base units. Must be greater than 0."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "name": "SOL basis",
+                "fundAmount": "1000000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step. The step adds `child`, the new child vault's address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/escrow/fund": {
+      "post": {
+        "tags": [
+          "Child vault transactions"
+        ],
+        "operationId": "build_escrow_fund",
+        "summary": "Fund child vault",
+        "description": "Requires key scope `escrow/fund`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority or a live delegate of it, and the vault must be in the key's allowlist when the key has one.\n\nMoves `amount` from `vault` into its child vault `child`. Any live delegate of `vault` may run it, whatever its permissions: no value leaves the family. Returns 400 when `child` does not belong to `vault`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "child",
+                  "amount"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "The parent vault, a vault that takes deposits. A key whose allowlist names it also reaches its child vaults."
+                  },
+                  "child": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "A child vault of `vault`."
+                  },
+                  "amount": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "Amount to move, `mint` base units."
+                  },
+                  "mint": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Token to move. Defaults to the deposit mint. Another mint must be tracked by a Jupiter strategy of the sending vault (400 otherwise). When the receiving vault has no Jupiter strategy for it, the same transaction creates one first."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "child": "CHILD_VAULT_PUBLIC_KEY",
+                "amount": "1000000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/escrow/defund": {
+      "post": {
+        "tags": [
+          "Child vault transactions"
+        ],
+        "operationId": "build_escrow_defund",
+        "summary": "Defund child vault",
+        "description": "Requires key scope `escrow/defund`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority or a live delegate of it, and the vault must be in the key's allowlist when the key has one.\n\nMoves `amount` from the child vault `child` back into `vault`. Same rules as `escrow/fund`. A transfer back to the parent works in every vault status.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "child",
+                  "amount"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "The parent vault, a vault that takes deposits. A key whose allowlist names it also reaches its child vaults."
+                  },
+                  "child": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "A child vault of `vault`."
+                  },
+                  "amount": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "Amount to move, `mint` base units."
+                  },
+                  "mint": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Token to move. Defaults to the deposit mint. Another mint must be tracked by a Jupiter strategy of the sending vault (400 otherwise). When the receiving vault has no Jupiter strategy for it, the same transaction creates one first."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "child": "CHILD_VAULT_PUBLIC_KEY",
+                "amount": "1000000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/escrow/transfer": {
+      "post": {
+        "tags": [
+          "Child vault transactions"
+        ],
+        "operationId": "build_escrow_transfer",
+        "summary": "Transfer within vault family",
+        "description": "Requires key scope `escrow/transfer`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority or a live delegate of it, and the vault must be in the key's allowlist when the key has one.\n\nMoves `amount` between any two vaults of `vault`'s family: `vault` itself or one of its child vaults, in any direction. Same rules as `escrow/fund`. Returns 400 when `source` equals `destination` or either is outside the family.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "source",
+                  "destination",
+                  "amount"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "The parent vault, a vault that takes deposits. A key whose allowlist names it also reaches its child vaults."
+                  },
+                  "source": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "`vault` or one of its child vaults."
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "`vault` or one of its child vaults. Must differ from `source`."
+                  },
+                  "amount": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "Amount to move, `mint` base units."
+                  },
+                  "mint": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "Token to move. Defaults to the deposit mint. Another mint must be tracked by a Jupiter strategy of the sending vault (400 otherwise). When the receiving vault has no Jupiter strategy for it, the same transaction creates one first."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "source": "CHILD_VAULT_PUBLIC_KEY",
+                "destination": "OTHER_CHILD_VAULT_PUBLIC_KEY",
+                "amount": "1000000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build result. One step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "vault",
+                    "result"
+                  ],
+                  "properties": {
+                    "vault": {
+                      "$ref": "#/components/schemas/PublicKey"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/BuiltStep"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/transactions/escrow/close": {
+      "post": {
+        "tags": [
+          "Child vault transactions"
+        ],
+        "operationId": "build_escrow_close",
+        "summary": "Close child vault",
+        "description": "Requires key scope `escrow/close`.\n\nReturns an unsigned v0 transaction for the manager to sign. Do not send `payer`: the API sets it to the key's manager and rejects a body that contains it. Unknown fields are ignored. The key's manager must be the vault's current on-chain authority, and the vault must be in the key's allowlist when the key has one. A delegate wallet gets 403.\n\nCloses the child vault `child` and returns its rent. The program rejects it while the child still holds anything the keeper would count: open strategies, an idle deposit-token balance, or, on a non-USDC child, USDC. With `defundFirst`, the same transaction first moves every Jupiter-tracked token and the idle deposit token back to `vault` and closes the emptied Jupiter strategies. Close the child's DLMM positions, limit orders and Phoenix account first; with `defundFirst` the build returns 400 while any remain.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vault",
+                  "child"
+                ],
+                "properties": {
+                  "vault": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "The parent vault, a vault that takes deposits. A key whose allowlist names it also reaches its child vaults."
+                  },
+                  "child": {
+                    "$ref": "#/components/schemas/PublicKey",
+                    "description": "A child vault of `vault`."
+                  },
+                  "defundFirst": {
+                    "type": "boolean",
+                    "description": "Sweep the child's tokens back to `vault` before closing."
+                  }
+                }
+              },
+              "example": {
+                "vault": "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+                "child": "CHILD_VAULT_PUBLIC_KEY",
+                "defundFirst": true
               }
             }
           }
@@ -4723,12 +5868,19 @@
           "lastNavTs",
           "navEpoch",
           "depositPaused",
+          "approvalRequired",
+          "pendingWithdrawalShares",
           "authority",
+          "parent",
+          "childCount",
+          "selection",
           "metadata",
           "manager",
+          "avatarUrl",
           "hidden",
           "verified",
           "tags",
+          "showTradeHistory",
           "performance"
         ],
         "properties": {
@@ -4802,8 +5954,35 @@
           "depositPaused": {
             "type": "boolean"
           },
+          "approvalRequired": {
+            "type": "boolean",
+            "description": "Deposits and withdrawals settle only after the manager approves each one."
+          },
+          "pendingWithdrawalShares": {
+            "$ref": "#/components/schemas/BaseUnitAmount",
+            "description": "Shares queued for withdrawal, settled by the next NAV post."
+          },
           "authority": {
             "$ref": "#/components/schemas/PublicKey"
+          },
+          "parent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PublicKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent vault on a child vault. Null on a vault that takes deposits."
+          },
+          "childCount": {
+            "type": "integer",
+            "description": "Number of child vaults under this vault."
+          },
+          "selection": {
+            "type": "boolean",
+            "description": "The manager is a candidate in selection: only the vault authority may deposit, and the vault stays off public lists until an administrator promotes it."
           },
           "metadata": {
             "type": [
@@ -4860,6 +6039,13 @@
               }
             }
           },
+          "avatarUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The vault's own uploaded picture. Null when none."
+          },
           "hidden": {
             "type": "boolean"
           },
@@ -4872,6 +6058,10 @@
               "type": "string"
             },
             "maxItems": 5
+          },
+          "showTradeHistory": {
+            "type": "boolean",
+            "description": "Manager setting. False hides the vault's public trade history."
           },
           "performance": {
             "type": [
@@ -4930,11 +6120,30 @@
                 "$ref": "#/components/schemas/BaseUnitAmount"
               },
               "shareSymbol": {
-                "type": ["string", "null"],
+                "type": [
+                  "string",
+                  "null"
+                ],
                 "description": "The share token's Metaplex metadata symbol, the ticker wallets show. Null until the vault's share metadata is created."
               },
               "idleBalance": {
                 "$ref": "#/components/schemas/BaseUnitAmount"
+              },
+              "usdc": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "On a non-USDC vault, its USDC account, where Phoenix collateral returns. The keeper values it. Null on a USDC vault.",
+                "properties": {
+                  "token": {
+                    "$ref": "#/components/schemas/TokenInfo"
+                  },
+                  "balance": {
+                    "$ref": "#/components/schemas/BaseUnitAmount",
+                    "description": "USDC base units."
+                  }
+                }
               },
               "unmanagedHoldings": {
                 "type": "array",
@@ -4987,6 +6196,10 @@
               },
               "openStrategyCount": {
                 "type": "integer"
+              },
+              "delegateCount": {
+                "type": "integer",
+                "description": "Number of delegates of this vault."
               },
               "protocol": {
                 "type": "object",
@@ -5912,6 +7125,10 @@
                 },
                 "cancellable": {
                   "type": "boolean"
+                },
+                "awaitingApproval": {
+                  "type": "boolean",
+                  "description": "True only on a vault with `approvalRequired` while the manager has not approved the request's current amount."
                 }
               }
             }
@@ -5943,6 +7160,10 @@
                 },
                 "cancellable": {
                   "type": "boolean"
+                },
+                "awaitingApproval": {
+                  "type": "boolean",
+                  "description": "True only on a vault with `approvalRequired` while the manager has not approved the request's current amount."
                 }
               }
             }
@@ -6411,6 +7632,24 @@
           "activePrice": {
             "type": "string",
             "description": "Token Y per token X."
+          }
+        }
+      },
+      "MinOut": {
+        "type": "object",
+        "description": "The least a swap may return, from the quote the manager approved: at least `minOutAmount` of output for `inAmount` of input. A build that swaps a different input scales it, so it holds as a price floor. When a fresh quote is below it, the build returns 409 `QuoteMoved`.",
+        "required": [
+          "inAmount",
+          "minOutAmount"
+        ],
+        "properties": {
+          "inAmount": {
+            "$ref": "#/components/schemas/BaseUnitAmount",
+            "description": "Input the quote was for, input-mint base units. Must be greater than 0."
+          },
+          "minOutAmount": {
+            "$ref": "#/components/schemas/BaseUnitAmount",
+            "description": "Least output for `inAmount`, output-mint base units."
           }
         }
       }

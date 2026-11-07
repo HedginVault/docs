@@ -145,6 +145,7 @@
               "POST /transactions/phoenix/deposit",
               "POST /transactions/phoenix/withdraw",
               "POST /transactions/phoenix/order",
+              "POST /transactions/phoenix/tpsl",
               "POST /transactions/phoenix/cancel",
               "POST /transactions/phoenix/sweep"
             ]
@@ -156,7 +157,21 @@
               "POST /transactions/vault/update",
               "POST /transactions/vault/claim-fee",
               "POST /transactions/vault/close",
-              "POST /transactions/strategy/close"
+              "POST /transactions/strategy/close",
+              "POST /transactions/deposit/approve",
+              "POST /transactions/deposit/reject",
+              "POST /transactions/withdrawal/approve",
+              "POST /transactions/withdrawal/reject"
+            ]
+          },
+          {
+            "group": "Child vault transactions",
+            "pages": [
+              "POST /transactions/escrow/create",
+              "POST /transactions/escrow/fund",
+              "POST /transactions/escrow/defund",
+              "POST /transactions/escrow/transfer",
+              "POST /transactions/escrow/close"
             ]
           },
           {

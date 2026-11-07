@@ -38,8 +38,8 @@ A scope check that fails returns 403 with code `Forbidden`.
 
 On every request that names a vault, the API reads the vault from the chain and checks two things:
 
-1. If the key has a vault allowlist, the vault is on it.
-2. The key's manager is the vault's current on-chain authority.
+1. If the key has a vault allowlist, the vault is on it. A key that lists a vault also reaches that vault's child vaults.
+2. The key's manager is the vault's current on-chain authority or one of its live delegates. Each builder then checks the delegate's permissions, and some actions, such as `escrow/create` or `deposit/approve`, accept only the authority.
 
 If either check fails, the request returns 403. The check reads the chain on every request, so it reflects authority changes at once.
 
@@ -54,7 +54,8 @@ Some builds return a `next` step that names another builder action. The key need
 | Action you call | Actions its `next` steps can name |
 | --- | --- |
 | `jupiter/swap` | `jupiter/swap`, `jupiter/sweep` |
-| `dlmm/zap-out` | `jupiter/sweep` |
+| `dlmm/remove` with `slippageBps` | `dlmm/zap-out/swap` |
+| `dlmm/zap-out` | `dlmm/zap-out/swap`, `jupiter/sweep` |
 | `dlmm/extend` | `dlmm/extend`, `dlmm/add-range` |
 | `dlmm/zap-out/swap` | `dlmm/zap-out/swap` |
 
