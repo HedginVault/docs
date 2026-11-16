@@ -6134,6 +6134,7 @@
           "navEpoch",
           "depositPaused",
           "approvalRequired",
+          "pendingDeposits",
           "pendingWithdrawalShares",
           "authority",
           "parent",
@@ -6222,6 +6223,10 @@
           "approvalRequired": {
             "type": "boolean",
             "description": "Deposits and withdrawals settle only after the manager approves each one."
+          },
+          "pendingDeposits": {
+            "$ref": "#/components/schemas/BaseUnitAmount",
+            "description": "Deposits queued for the next NAV post. The program counts them against the deposit cap."
           },
           "pendingWithdrawalShares": {
             "$ref": "#/components/schemas/BaseUnitAmount",
@@ -6424,9 +6429,6 @@
                     }
                   }
                 }
-              },
-              "pendingDeposits": {
-                "$ref": "#/components/schemas/BaseUnitAmount"
               },
               "pendingWithdrawalShares": {
                 "$ref": "#/components/schemas/BaseUnitAmount"
